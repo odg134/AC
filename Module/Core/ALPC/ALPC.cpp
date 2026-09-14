@@ -53,6 +53,9 @@ namespace ALPC
         LONG S = NtAlpcConnectPort( &Port, &PortName, nullptr, nullptr, 0,
             nullptr, nullptr, nullptr, nullptr, nullptr, nullptr );
 
+        if ( S < 0 )
+            printf( "[ALPC] NtAlpcConnectPort failed: 0x%08X\n", (unsigned)S );
+
         return S >= 0;
     }
 
