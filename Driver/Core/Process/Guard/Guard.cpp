@@ -24,6 +24,8 @@ namespace Process::Guard
 
     static void PushEvent( const Telemetry::AccessEvent& Ev )
     {
+        EnsureLock();
+
         KIRQL Irql;
         KeAcquireSpinLock( &g_Lock, &Irql );
 
@@ -37,6 +39,8 @@ namespace Process::Guard
 
     ULONG DrainEvents( Telemetry::AccessEvent* Out, ULONG Max )
     {
+        EnsureLock();
+
         KIRQL Irql;
         KeAcquireSpinLock( &g_Lock, &Irql );
 
