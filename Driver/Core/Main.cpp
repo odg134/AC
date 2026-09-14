@@ -3,6 +3,7 @@
 #include <Core/Dispatch/Handlers/ALPC/ALPC.h>
 #include <Core/Thread/Thread.h>
 #include <Core/Offsets/Offsets.h>
+#include <Core/Mem/Mem.h>
 
 DRIVER_UNLOAD DriverUnload;
 
@@ -14,6 +15,7 @@ void DriverUnload( PDRIVER_OBJECT DriverObject )
 {
     ALPC::Stop();
     Thread::Stop();
+    Mem::Shutdown();
 
     UNICODE_STRING Symlink = RTL_CONSTANT_STRING( L"\\DosDevices\\AC_Driver" );
     IoDeleteSymbolicLink( &Symlink );
@@ -63,10 +65,20 @@ DriverEntry(
     DriverObject->MajorFunction[IRP_MJ_CLOSE] = DispatchClose;
     DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = DispatchControl;
 
+    Status = Mem::Initialize( 256 * 1024 );
+    if ( !NT_SUCCESS( Status ) )
+    {
+        LogError( "Mem::Initialize failed: {}", Status );
+        IoDeleteSymbolicLink( &Symlink );
+        IoDeleteDevice( DeviceObject );
+        return Status;
+    }
+
     Status = Offsets::Init();
     if ( !NT_SUCCESS( Status ) )
     {
         LogError( "Offsets::Init failed: {}", Status );
+        Mem::Shutdown();
         IoDeleteSymbolicLink( &Symlink );
         IoDeleteDevice( DeviceObject );
         return Status;
@@ -78,6 +90,7 @@ DriverEntry(
     if ( !NT_SUCCESS( Status ) )
     {
         LogError( "Thread::Start failed: {}", Status );
+        Mem::Shutdown();
         IoDeleteSymbolicLink( &Symlink );
         IoDeleteDevice( DeviceObject );
         return Status;
@@ -88,6 +101,7 @@ DriverEntry(
     {
         LogError( "ALPC::Start failed: {}", Status );
         Thread::Stop();
+        Mem::Shutdown();
         IoDeleteSymbolicLink( &Symlink );
         IoDeleteDevice( DeviceObject );
         return Status;

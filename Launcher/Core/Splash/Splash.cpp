@@ -126,21 +126,23 @@ namespace Splash
                 }
             }
 
-            // X close button, above bar in bottom-right
+            // X close button drawn as two diagonal lines — avoids any font encoding issues
             //
             {
-                HFONT Font = CreateFontW( 16, 0, 0, 0, FW_NORMAL,
-                    FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                    OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                    CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Arial" );
-                HGDIOBJ OldFont = SelectObject( MemDc, Font );
+                COLORREF XColor = InError ? RGB( 180, 180, 180 ) : RGB( 55, 55, 55 );
+                HPEN     Pen    = CreatePen( PS_SOLID, 1, XColor );
+                HGDIOBJ  OldPen = SelectObject( MemDc, Pen );
 
-                SetTextColor( MemDc, InError ? RGB( 180, 180, 180 ) : RGB( 55, 55, 55 ) );
-                RECT Btn = CloseRc;
-                DrawTextW( MemDc, L"×", -1, &Btn, DT_CENTER | DT_VCENTER | DT_SINGLELINE );
+                int L = CloseRc.left  + 4;
+                int T = CloseRc.top   + 4;
+                int R = CloseRc.right  - 4;
+                int B = CloseRc.bottom - 4;
 
-                SelectObject( MemDc, OldFont );
-                DeleteObject( Font );
+                MoveToEx( MemDc, L, T, nullptr ); LineTo( MemDc, R, B );
+                MoveToEx( MemDc, R, T, nullptr ); LineTo( MemDc, L, B );
+
+                SelectObject( MemDc, OldPen );
+                DeleteObject( Pen );
             }
 
             BitBlt( Dc, 0, 0, Rc.right, Rc.bottom, MemDc, 0, 0, SRCCOPY );
