@@ -23,7 +23,10 @@
     <ClCompile Include="Misc\Log\Log.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Core\Environment\Environment.cpp">
+    <ClCompile Include="Core\Thread\Thread.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Identity\Disk\Disk.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -40,7 +43,10 @@
     <ClInclude Include="Misc\Log\Log.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Core\Environment\Environment.h">
+    <ClInclude Include="Core\Thread\Thread.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Identity\Disk\Disk.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

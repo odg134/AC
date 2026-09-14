@@ -94,15 +94,17 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Core\Dispatch\Dispatch.cpp" />
-    <ClCompile Include="Core\Environment\Environment.cpp" />
+    <ClCompile Include="Core\Identity\Disk\Disk.cpp" />
     <ClCompile Include="Core\Identity\Identity.cpp" />
     <ClCompile Include="Core\Main.cpp" />
+    <ClCompile Include="Core\Thread\Thread.cpp" />
     <ClCompile Include="Misc\Log\Log.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Core\Dispatch\Dispatch.h" />
-    <ClInclude Include="Core\Environment\Environment.h" />
+    <ClInclude Include="Core\Identity\Disk\Disk.h" />
     <ClInclude Include="Core\Identity\Identity.h" />
+    <ClInclude Include="Core\Thread\Thread.h" />
     <ClInclude Include="Misc\Incl.h" />
     <ClInclude Include="Misc\Log\Log.h" />
   </ItemGroup>
