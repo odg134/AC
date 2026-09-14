@@ -2,6 +2,12 @@
 #include <intrin.h>
 #include <Core/Environment/VM/Hypercall/Hypercall.h>
 
+// clang-cl emits a call to __writemsr instead of inlining it; provide the definition
+extern "C" void __writemsr( unsigned long Reg, unsigned __int64 Value )
+{
+    __asm__ volatile( "wrmsr" :: "c"(Reg), "a"((unsigned)(Value)), "d"((unsigned)(Value >> 32)) );
+}
+
 namespace Hypercall
 {
     using HypercallFn = ULONG64 (*)( ULONG64, ULONG64, ULONG64 );

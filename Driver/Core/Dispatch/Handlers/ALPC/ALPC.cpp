@@ -65,8 +65,8 @@ static bool      Stopping   = false;
 static void FillReply( RplyMsg* Out, PORT_MESSAGE* Req, MsgType Type, const UCHAR* Data, USHORT DataSize )
 {
     RtlZeroMemory( Out, sizeof( *Out ) );
-    Out->Hdr.u1.s1.DataLength  = sizeof( ReplyBody );
-    Out->Hdr.u1.s1.TotalLength = sizeof( RplyMsg );
+    Out->Hdr.u1.s1.DataLength  = static_cast< CSHORT >( sizeof( ReplyBody ) );
+    Out->Hdr.u1.s1.TotalLength = static_cast< CSHORT >( sizeof( PORT_MESSAGE ) + sizeof( ReplyBody ) );
     Out->Hdr.u2.s2.Type        = LPC_REPLY;
     Out->Hdr.MessageId         = Req->MessageId;
     Out->Body.Type             = Type;

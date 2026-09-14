@@ -3,6 +3,24 @@ import { decryptPayload } from "./crypto";
 export const PACKET_MAGIC = 0xac010000;
 const HEADER_SIZE = 24;
 
+// Payload layout (all little-endian):
+//   +0   ULONG  identityCount
+//   +4   ULONG64[8] hashes
+//   +68  ULONG  diskCount
+//   +72  DiskEntry[8]  (each 17 bytes: hashAta:8, hashStorage:8, mismatch:1)
+//   +208 SmbiosEntry
+//     +0   UUID[16]
+//     +16  systemSerial:8
+//     +24  baseboardSerial:8
+//     +32  chassisSerial:8
+//     +40  processorCount:4
+//     +44  processorHashes[8]:64
+//     +108 memoryCount:4
+//     +112 memoryHashes[16]:128
+//   Total: 208 + 240 = 448 bytes
+
+const SMBIOS_OFF = 208;
+
 export interface ParsedPacket {
   header: {
     magic: number;
@@ -18,6 +36,24 @@ export interface ParsedPacket {
     diskCount: number;
     disks: { hashAta: bigint; hashStorage: bigint; mismatch: boolean }[];
   };
+  smbios: {
+    systemUUID: string;           // 32-char hex
+    systemSerial: bigint;
+    baseboardSerial: bigint;
+    chassisSerial: bigint;
+    processorCount: number;
+    processorHashes: bigint[];
+    memoryCount: number;
+    memoryHashes: bigint[];
+  };
+}
+
+function bytesToHex(view: DataView, off: number, len: number): string {
+  let s = "";
+  for (let i = 0; i < len; i++) {
+    s += view.getUint8(off + i).toString(16).padStart(2, "0");
+  }
+  return s;
 }
 
 export function parsePacket(raw: Uint8Array): ParsedPacket {
@@ -42,6 +78,7 @@ export function parsePacket(raw: Uint8Array): ParsedPacket {
   decryptPayload(payload, header.sequence);
 
   const pv = new DataView(payload.buffer);
+
   const identityCount = pv.getUint32(0, true);
   const hashes: bigint[] = [];
   for (let i = 0; i < Math.min(identityCount, 8); i++) {
@@ -59,5 +96,34 @@ export function parsePacket(raw: Uint8Array): ParsedPacket {
     });
   }
 
-  return { header, hwid: { identityCount, hashes, diskCount, disks } };
+  const so = SMBIOS_OFF;
+  const systemUUID = bytesToHex(pv, so, 16);
+  const systemSerial = pv.getBigUint64(so + 16, true);
+  const baseboardSerial = pv.getBigUint64(so + 24, true);
+  const chassisSerial = pv.getBigUint64(so + 32, true);
+  const processorCount = pv.getUint32(so + 40, true);
+  const processorHashes: bigint[] = [];
+  for (let i = 0; i < Math.min(processorCount, 8); i++) {
+    processorHashes.push(pv.getBigUint64(so + 44 + i * 8, true));
+  }
+  const memoryCount = pv.getUint32(so + 108, true);
+  const memoryHashes: bigint[] = [];
+  for (let i = 0; i < Math.min(memoryCount, 16); i++) {
+    memoryHashes.push(pv.getBigUint64(so + 112 + i * 8, true));
+  }
+
+  return {
+    header,
+    hwid: { identityCount, hashes, diskCount, disks },
+    smbios: {
+      systemUUID,
+      systemSerial,
+      baseboardSerial,
+      chassisSerial,
+      processorCount,
+      processorHashes,
+      memoryCount,
+      memoryHashes,
+    },
+  };
 }

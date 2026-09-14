@@ -8,6 +8,23 @@ import { resetHeartbeat } from "../services/watchdog";
 
 const router = new Hono();
 
+function hashHex(h: bigint): string {
+  return h.toString(16).padStart(16, "0");
+}
+
+function buildFingerprint(pkt: ReturnType<typeof parsePacket>): string {
+  const all: string[] = [
+    ...pkt.hwid.hashes.map(hashHex),
+    hashHex(pkt.smbios.systemSerial),
+    hashHex(pkt.smbios.baseboardSerial),
+    hashHex(pkt.smbios.chassisSerial),
+    ...pkt.smbios.processorHashes.map(hashHex),
+    ...pkt.smbios.memoryHashes.map(hashHex),
+  ].filter((h) => h !== "0000000000000000");
+
+  return [...all].sort().join(",");
+}
+
 router.post("/:token", async (c) => {
   const token = c.req.param("token");
 
@@ -39,8 +56,16 @@ router.post("/:token", async (c) => {
   }
 
   const now = Math.floor(Date.now() / 1000);
-  const hashes = pkt.hwid.hashes.map((h) => h.toString(16).padStart(16, "0"));
-  const sortedFp = [...hashes].sort().join(",");
+  const sortedFp = buildFingerprint(pkt);
+
+  const smbiosJson = JSON.stringify({
+    uuid: pkt.smbios.systemUUID,
+    systemSerial: hashHex(pkt.smbios.systemSerial),
+    baseboardSerial: hashHex(pkt.smbios.baseboardSerial),
+    chassisSerial: hashHex(pkt.smbios.chassisSerial),
+    processors: pkt.smbios.processorHashes.map(hashHex),
+    memory: pkt.smbios.memoryHashes.map(hashHex),
+  });
 
   await db.insert(telemetry).values({
     id: crypto.randomUUID(),
@@ -48,15 +73,16 @@ router.post("/:token", async (c) => {
     sequence: pkt.header.sequence,
     packetTimestamp: pkt.header.timestamp,
     identityCount: pkt.hwid.identityCount,
-    identityHashes: JSON.stringify(hashes),
+    identityHashes: JSON.stringify(pkt.hwid.hashes.map(hashHex)),
     diskCount: pkt.hwid.diskCount,
     disks: JSON.stringify(
       pkt.hwid.disks.map((d) => ({
-        ata: d.hashAta.toString(16).padStart(16, "0"),
-        storage: d.hashStorage.toString(16).padStart(16, "0"),
+        ata: hashHex(d.hashAta),
+        storage: hashHex(d.hashStorage),
         mismatch: d.mismatch,
       })),
     ),
+    smbios: smbiosJson,
     receivedAt: now,
   });
 
@@ -90,8 +116,8 @@ router.post("/:token", async (c) => {
       disks: pkt.hwid.disks
         .filter((d) => d.mismatch)
         .map((d) => ({
-          ata: d.hashAta.toString(16).padStart(16, "0"),
-          storage: d.hashStorage.toString(16).padStart(16, "0"),
+          ata: hashHex(d.hashAta),
+          storage: hashHex(d.hashStorage),
         })),
     });
     return c.json({ ok: false, reason: "disk_mismatch" });

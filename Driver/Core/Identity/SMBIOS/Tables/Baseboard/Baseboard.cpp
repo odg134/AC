@@ -4,7 +4,6 @@
 
 namespace Baseboard
 {
-
     static void CopyStr( char* Dst, ULONG DstLen, const char* Src )
     {
         if ( !Src ) { Dst[0] = '\0'; return; }
@@ -29,10 +28,10 @@ namespace Baseboard
             auto* R = reinterpret_cast< const Tables::BaseboardRaw* >( S );
 
             CopyStr( Out->Manufacturer, sizeof( Out->Manufacturer ), Tables::GetString( S, R->Manufacturer, End ) );
-            CopyStr( Out->Product,      sizeof( Out->Product ),      Tables::GetString( S, R->Product,      End ) );
-            CopyStr( Out->Version,      sizeof( Out->Version ),      Tables::GetString( S, R->Version,      End ) );
+            CopyStr( Out->Product, sizeof( Out->Product ), Tables::GetString( S, R->Product, End ) );
+            CopyStr( Out->Version, sizeof( Out->Version ), Tables::GetString( S, R->Version, End ) );
             CopyStr( Out->SerialNumber, sizeof( Out->SerialNumber ), Tables::GetString( S, R->SerialNumber, End ) );
-            CopyStr( Out->AssetTag,     sizeof( Out->AssetTag ),     Tables::GetString( S, R->AssetTag,     End ) );
+            CopyStr( Out->AssetTag, sizeof( Out->AssetTag ), Tables::GetString( S, R->AssetTag, End ) );
 
             Out->Valid = true;
 

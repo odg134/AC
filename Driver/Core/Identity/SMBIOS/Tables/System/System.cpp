@@ -4,7 +4,6 @@
 
 namespace System
 {
-
     static void CopyStr( char* Dst, ULONG DstLen, const char* Src )
     {
         if ( !Src ) { Dst[0] = '\0'; return; }
@@ -29,11 +28,11 @@ namespace System
             auto* R = reinterpret_cast< const Tables::SystemRaw* >( S );
 
             CopyStr( Out->Manufacturer, sizeof( Out->Manufacturer ), Tables::GetString( S, R->Manufacturer, End ) );
-            CopyStr( Out->ProductName,  sizeof( Out->ProductName ),  Tables::GetString( S, R->ProductName,  End ) );
-            CopyStr( Out->Version,      sizeof( Out->Version ),      Tables::GetString( S, R->Version,      End ) );
+            CopyStr( Out->ProductName, sizeof( Out->ProductName ), Tables::GetString( S, R->ProductName, End ) );
+            CopyStr( Out->Version, sizeof( Out->Version ), Tables::GetString( S, R->Version, End ) );
             CopyStr( Out->SerialNumber, sizeof( Out->SerialNumber ), Tables::GetString( S, R->SerialNumber, End ) );
-            CopyStr( Out->SKUNumber,    sizeof( Out->SKUNumber ),    Tables::GetString( S, R->SKUNumber,    End ) );
-            CopyStr( Out->Family,       sizeof( Out->Family ),       Tables::GetString( S, R->Family,       End ) );
+            CopyStr( Out->SKUNumber, sizeof( Out->SKUNumber ), Tables::GetString( S, R->SKUNumber, End ) );
+            CopyStr( Out->Family, sizeof( Out->Family ), Tables::GetString( S, R->Family, End ) );
 
             RtlCopyMemory( Out->UUID, R->UUID, 16 );
 

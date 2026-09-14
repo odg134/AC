@@ -11,7 +11,7 @@ namespace ALPC
         union { struct { USHORT Type; USHORT DataInfoOffset; } s2; ULONG ZeroInit; } u2;
         union { struct { HANDLE UniqueProcess; HANDLE UniqueThread; } ClientId; double Unused; };
         ULONG MessageId;
-        ULONG Reserved;
+        SIZE_T Reserved;
     };
 #pragma pack(pop)
 
@@ -25,7 +25,7 @@ namespace ALPC
 
     typedef LONG( NTAPI* FnNtAlpcSendWaitReceivePort )(
         HANDLE, ULONG, NT_PORT_MESSAGE*, PVOID,
-        NT_PORT_MESSAGE*, PULONG, PVOID, PLARGE_INTEGER );
+        NT_PORT_MESSAGE*, SIZE_T*, PVOID, PLARGE_INTEGER );
 
     static constexpr ULONG ALPC_MSGFLG_SYNC_REQUEST = 0x20000;
 
@@ -73,12 +73,12 @@ namespace ALPC
             // Request one telemetry packet
             //
             struct { NT_PORT_MESSAGE Hdr; RequestBody Body; } Req{};
-            Req.Hdr.u1.s1.DataLength = sizeof( RequestBody );
-            Req.Hdr.u1.s1.TotalLength = static_cast< USHORT >( sizeof( Req ) );
+            Req.Hdr.u1.s1.DataLength  = static_cast< USHORT >( sizeof( RequestBody ) );
+            Req.Hdr.u1.s1.TotalLength = static_cast< USHORT >( sizeof( NT_PORT_MESSAGE ) + sizeof( RequestBody ) );
             Req.Body.Type = MsgType::RequestTelemetry;
 
             struct { NT_PORT_MESSAGE Hdr; ReplyBody Body; } Reply{};
-            ULONG ReplyLen = sizeof( Reply );
+            SIZE_T ReplyLen = sizeof( NT_PORT_MESSAGE ) + sizeof( ReplyBody );
 
             LONG S = NtAlpcSendWaitReceivePort(
                 Port, ALPC_MSGFLG_SYNC_REQUEST,

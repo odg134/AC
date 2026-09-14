@@ -4,7 +4,6 @@
 
 namespace Bios
 {
-
     static void CopyStr( char* Dst, ULONG DstLen, const char* Src )
     {
         if ( !Src ) { Dst[0] = '\0'; return; }
@@ -28,8 +27,8 @@ namespace Bios
 
             auto* R = reinterpret_cast< const Tables::BiosRaw* >( S );
 
-            CopyStr( Out->Vendor,      sizeof( Out->Vendor ),      Tables::GetString( S, R->Vendor,          End ) );
-            CopyStr( Out->Version,     sizeof( Out->Version ),     Tables::GetString( S, R->BiosVersion,     End ) );
+            CopyStr( Out->Vendor, sizeof( Out->Vendor ), Tables::GetString( S, R->Vendor, End ) );
+            CopyStr( Out->Version, sizeof( Out->Version ), Tables::GetString( S, R->BiosVersion, End ) );
             CopyStr( Out->ReleaseDate, sizeof( Out->ReleaseDate ), Tables::GetString( S, R->BiosReleaseDate, End ) );
 
             Out->MajorRelease = R->MajorRelease;
