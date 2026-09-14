@@ -3,11 +3,12 @@
 
 namespace Offsets
 {
-    inline UINT64 PsIntegrityCheckEnabled{};
-    inline UINT64 MaxDataSize{};
-    inline UINT64 Timer{};
-    inline UINT64 CallbackHealthFlag{};
-    inline UINT64 KiInitData{};
+    inline UINT64  KiFilterFiberContext{};
+    inline UINT64* MaxDataSize{};
+    inline UINT32* CallbackHealthFlag{};
+    inline UINT32* PsIntegrityCheckEnabled{};
+    inline UINT64  KiInitData{};
+    inline UINT64  Timer{};
 
     NTSTATUS Init( );
 }
