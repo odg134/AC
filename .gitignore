@@ -1,0 +1,5 @@
+.vs/
+Bin/
+*.user
+*.VC.db
+*.VC.opendb
