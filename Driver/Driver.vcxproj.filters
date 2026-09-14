@@ -68,6 +68,12 @@
     <ClCompile Include="Core\Dispatch\Packet\Packet.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Core\Dispatch\Packet\Telemetry\Telemetry.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Dispatch\Packet\Queue\Queue.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Core\Dispatch\Dispatch.h">
@@ -125,6 +131,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Core\Dispatch\Packet\Packet.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Dispatch\Packet\Telemetry\Telemetry.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Dispatch\Packet\Queue\Queue.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

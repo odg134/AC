@@ -14,11 +14,12 @@ public:
 
     Identity( ) = default;
 
-    bool Add( ULONG64 Hash );
-    bool Remove( ULONG64 Hash );
-    bool Contains( ULONG64 Hash ) const;
-    void Clear( );
+    bool  Add( ULONG64 Hash );
+    bool  Remove( ULONG64 Hash );
+    bool  Contains( ULONG64 Hash ) const;
+    void  Clear( );
     ULONG Count( ) const;
+    ULONG Fill( ULONG64* OutHashes, ULONG Max ) const;
 private:
 
     // This represents the HWID table.

@@ -57,3 +57,14 @@ ULONG Identity::Count( ) const
 {
     return m_Count;
 }
+
+ULONG Identity::Fill( ULONG64* OutHashes, ULONG Max ) const
+{
+    ULONG Written = 0;
+    for ( ULONG i = 0; i < MaxEntries && Written < Max; ++i )
+    {
+        if ( m_Table[i].Valid )
+            OutHashes[Written++] = m_Table[i].Hash;
+    }
+    return Written;
+}
