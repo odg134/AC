@@ -80,29 +80,20 @@ static void HandleClient( HANDLE CommPort )
     LARGE_INTEGER Timeout{};
     Timeout.QuadPart = -500LL * 10'000LL;
 
-    UCHAR RecvBuf[sizeof( ReqMsg )]{};
-    SIZE_T RecvLen = sizeof( RecvBuf );
-
-    RplyMsg Reply{};
-    bool HasReply = false;
+    UCHAR RecvBuf[sizeof( ReqMsg ) + 8]{};
 
     while ( !Stopping )
     {
         RtlZeroMemory( RecvBuf, sizeof( RecvBuf ) );
-        RecvLen = sizeof( RecvBuf );
+        SIZE_T RecvLen = sizeof( RecvBuf );
 
+        // Receive next request
         NTSTATUS S = ZwAlpcSendWaitReceivePort(
-            CommPort,
-            HasReply ? ALPC_MSGFLG_RELEASE_MESSAGE : 0,
-            HasReply ? &Reply.Hdr : nullptr,
-            nullptr,
-            reinterpret_cast<PORT_MESSAGE*>( RecvBuf ),
-            &RecvLen,
-            nullptr,
-            &Timeout
+            CommPort, 0,
+            nullptr, nullptr,
+            reinterpret_cast<PORT_MESSAGE*>( RecvBuf ), &RecvLen,
+            nullptr, &Timeout
         );
-
-        HasReply = false;
 
         if ( S == STATUS_TIMEOUT )
             continue;
@@ -111,30 +102,38 @@ static void HandleClient( HANDLE CommPort )
             break;
 
         auto* Msg = reinterpret_cast<ReqMsg*>( RecvBuf );
-        ULONG Type = Msg->Hdr.u2.s2.Type & 0x3FF;
+        ULONG MsgType = Msg->Hdr.u2.s2.Type & 0x3FF;
 
-        if ( Type == LPC_PORT_CLOSED || Type == LPC_CLIENT_DIED )
+        if ( MsgType == LPC_PORT_CLOSED || MsgType == LPC_CLIENT_DIED )
             break;
 
-        if ( Type != LPC_REQUEST )
+        if ( MsgType != LPC_REQUEST )
             continue;
 
-        if ( Msg->Body.Type == MsgType::RequestTelemetry )
+        // Build and send reply (separate call)
+        RplyMsg Reply{};
+
+        if ( Msg->Body.Type == ALPC::MsgType::RequestTelemetry )
         {
             Packet::Raw Pkt{};
 
             if ( Packet::g_Queue.Dequeue( &Pkt ) )
-            {
-                FillReply( &Reply, &Msg->Hdr, MsgType::TelemetryData,
+                FillReply( &Reply, &Msg->Hdr, ALPC::MsgType::TelemetryData,
                     reinterpret_cast<UCHAR*>( &Pkt ), sizeof( Pkt ) );
-            }
             else
-            {
-                FillReply( &Reply, &Msg->Hdr, MsgType::Empty, nullptr, 0 );
-            }
-
-            HasReply = true;
+                FillReply( &Reply, &Msg->Hdr, ALPC::MsgType::Empty, nullptr, 0 );
         }
+        else
+        {
+            FillReply( &Reply, &Msg->Hdr, ALPC::MsgType::Empty, nullptr, 0 );
+        }
+
+        ZwAlpcSendWaitReceivePort(
+            CommPort, ALPC_MSGFLG_RELEASE_MESSAGE,
+            &Reply.Hdr, nullptr,
+            nullptr, nullptr,
+            nullptr, nullptr
+        );
     }
 }
 

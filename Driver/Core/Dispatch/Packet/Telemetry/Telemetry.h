@@ -3,6 +3,7 @@
 #include <Core/Identity/Identity.h>
 #include <Core/Identity/Disk/Disk.h>
 #include <Core/Identity/SMBIOS/SMBIOS.h>
+#include <Core/Identity/Network/Network.h>
 #include <Core/Dispatch/Packet/Packet.h>
 
 namespace Telemetry
@@ -12,6 +13,7 @@ namespace Telemetry
         const Identity* Id;
         const Disk*     DiskInfo;
         const Smbios*   SmbiosInfo;
+        const Network*  NetworkInfo;
     };
 
 #pragma pack(push, 1)
@@ -34,13 +36,33 @@ namespace Telemetry
         ULONG64 MemoryHashes[Memory::MaxDevices];
     };
 
+    // Two adapter slots; enough for most machines while keeping the payload under MaxPayload.
+    //
+    static constexpr ULONG MaxNetworkAdapters = 2;
+
+    struct NetworkEntry
+    {
+        ULONG64 HashCurrentMac;
+        ULONG64 HashPermanentMac;
+        BOOLEAN MacMismatch;
+    };
+
+    struct DnsData
+    {
+        ULONG64 HashDomain;
+        ULONG64 HashHostname;
+    };
+
     struct HwidPayload
     {
-        ULONG       IdentityCount;
-        ULONG64     Hashes[Identity::MaxEntries];
-        ULONG       DiskCount;
-        DiskEntry   Disks[Disk::MaxDisks];
-        SmbiosEntry SmbiosData;
+        ULONG        IdentityCount;
+        ULONG64      Hashes[Identity::MaxEntries];
+        ULONG        DiskCount;
+        DiskEntry    Disks[Disk::MaxDisks];
+        SmbiosEntry  SmbiosData;
+        ULONG        NetworkCount;
+        NetworkEntry NetworkAdapters[MaxNetworkAdapters];
+        DnsData      DnsInfo;
     };
 #pragma pack(pop)
 

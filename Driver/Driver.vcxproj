@@ -110,8 +110,13 @@
     <ClCompile Include="Core\Identity\Disk\Disk.cpp" />
     <ClCompile Include="Core\Identity\Disk\SMART\Smart.cpp" />
     <ClCompile Include="Core\Identity\Identity.cpp" />
+    <ClCompile Include="Core\Identity\Network\Dns\Dns.cpp" />
+    <ClCompile Include="Core\Identity\Network\Mac\Mac.cpp" />
+    <ClCompile Include="Core\Identity\Network\Network.cpp" />
+    <ClCompile Include="Core\Identity\Network\Nic\Nic.cpp" />
     <ClCompile Include="Core\Identity\SMBIOS\Tables\Baseboard\Baseboard.cpp" />
     <ClCompile Include="Core\Identity\SMBIOS\Tables\Bios\Bios.cpp" />
+    <ClCompile Include="Core\Identity\SMBIOS\Tables\Chassis\Chassis.cpp" />
     <ClCompile Include="Core\Identity\SMBIOS\Tables\System\System.cpp" />
     <ClCompile Include="Core\Identity\SMBIOS\Tables\Tables.cpp" />
     <ClCompile Include="Core\Main.cpp" />
@@ -143,6 +148,10 @@
     <ClInclude Include="Core\Identity\Disk\Disk.h" />
     <ClInclude Include="Core\Identity\Disk\SMART\Smart.h" />
     <ClInclude Include="Core\Identity\Identity.h" />
+    <ClInclude Include="Core\Identity\Network\Dns\Dns.h" />
+    <ClInclude Include="Core\Identity\Network\Mac\Mac.h" />
+    <ClInclude Include="Core\Identity\Network\Network.h" />
+    <ClInclude Include="Core\Identity\Network\Nic\Nic.h" />
     <ClInclude Include="Core\Identity\SMBIOS\Tables\Baseboard\Baseboard.h" />
     <ClInclude Include="Core\Identity\SMBIOS\Tables\Bios\Bios.h" />
     <ClInclude Include="Core\Identity\SMBIOS\Tables\Chassis\Chassis.h" />

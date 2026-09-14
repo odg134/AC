@@ -41,6 +41,23 @@ namespace Telemetry
         RtlCopyMemory( SE.MemoryHashes, Smb.Hashes( ).MemorySerials,
             SE.MemoryCount * sizeof( ULONG64 ) );
 
+        if ( Src.NetworkInfo )
+        {
+            Network::AdapterEntry Adapters[Telemetry::MaxNetworkAdapters]{};
+            Pay->NetworkCount = Src.NetworkInfo->FillAdapters( Adapters, MaxNetworkAdapters );
+
+            for ( ULONG I = 0; I < Pay->NetworkCount; ++I )
+            {
+                Pay->NetworkAdapters[I].HashCurrentMac   = Adapters[I].HashCurrentMac;
+                Pay->NetworkAdapters[I].HashPermanentMac = Adapters[I].HashPermanentMac;
+                Pay->NetworkAdapters[I].MacMismatch      = Adapters[I].MacMismatch ? TRUE : FALSE;
+            }
+
+            auto& Dns = Src.NetworkInfo->DnsData( );
+            Pay->DnsInfo.HashDomain   = Dns.HashDomain;
+            Pay->DnsInfo.HashHostname = Dns.HashHostname;
+        }
+
         LARGE_INTEGER Now;
         KeQuerySystemTimePrecise( &Now );
 

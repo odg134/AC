@@ -101,6 +101,21 @@
     <ClCompile Include="Core\Identity\SMBIOS\Tables\Tables.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Core\Identity\SMBIOS\Tables\Chassis\Chassis.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Identity\Network\Dns\Dns.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Identity\Network\Mac\Mac.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Identity\Network\Nic\Nic.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Identity\Network\Network.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Core\Dispatch\Dispatch.h">
@@ -197,6 +212,18 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Core\Identity\SMBIOS\Tables\Tables.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Identity\Network\Dns\Dns.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Identity\Network\Mac\Mac.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Identity\Network\Nic\Nic.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Identity\Network\Network.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
