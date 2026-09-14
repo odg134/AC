@@ -23,10 +23,19 @@ static bool ReadToken( wchar_t* Out, DWORD OutCch )
 
 static DWORD WINAPI WorkerProc( PVOID )
 {
+    // Require the driver to already be loaded — we never load it automatically
+    //
+    if ( !Driver::Open( ) )
+    {
+        Splash::SetError( L"Failure loading AC driver" );
+        return 1;
+    }
+
     wchar_t Token[2048]{};
     if ( !ReadToken( Token, _countof( Token ) ) )
     {
-        Splash::Quit( );
+        Driver::Close( );
+        Splash::SetError( L"AC_TOKEN environment variable not set" );
         return 1;
     }
 
@@ -44,7 +53,8 @@ static DWORD WINAPI WorkerProc( PVOID )
 
     if ( !Ok )
     {
-        Splash::Quit( );
+        Driver::Close( );
+        Splash::SetError( L"Could not reach backend, check that it is running" );
         return 1;
     }
 
@@ -54,7 +64,8 @@ static DWORD WINAPI WorkerProc( PVOID )
     //
     if ( !Crypto::Decrypt( Payload ) )
     {
-        Splash::Quit( );
+        Driver::Close( );
+        Splash::SetError( L"Module decryption failed" );
         return 1;
     }
 
@@ -63,14 +74,16 @@ static DWORD WINAPI WorkerProc( PVOID )
     DWORD Pid = Mapper::FindProcess( TargetExe );
     if ( !Pid )
     {
-        Splash::Quit( );
+        Driver::Close( );
+        Splash::SetError( L"notepad.exe is not running" );
         return 1;
     }
 
     HANDLE Process = OpenProcess( PROCESS_ALL_ACCESS, FALSE, Pid );
     if ( !Process )
     {
-        Splash::Quit( );
+        Driver::Close( );
+        Splash::SetError( L"Could not open target process, try running as administrator" );
         return 1;
     }
 
@@ -81,23 +94,17 @@ static DWORD WINAPI WorkerProc( PVOID )
 
     if ( !Mapped )
     {
-        Splash::Quit( );
+        Driver::Close( );
+        Splash::SetError( L"Module injection failed" );
         return 1;
     }
 
     Splash::SetProgress( 90 );
 
-    // Register the target PID with the driver for protection
-    //
-    if ( Driver::Open( ) )
-    {
-        Driver::ProtectProcess( Pid );
-        Driver::Close( );
-    }
+    Driver::ProtectProcess( Pid );
+    Driver::Close( );
 
     Splash::SetProgress( 100 );
-
-    Sleep( 1500 );
     Splash::Quit( );
     return 0;
 }

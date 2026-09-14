@@ -12,7 +12,7 @@ namespace VM::Timing
     ULONG64 MeasureMinCycles( )
     {
         constexpr ULONG Samples = 16;
-        ULONG64 Min = MAXULONG64;
+        ULONG64 Min = (ULONG64)-1;
         int Unused[4];
 
         __cpuid( Unused, 0 );

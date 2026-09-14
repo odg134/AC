@@ -106,6 +106,7 @@
     <ClCompile Include="Core\Environment\VM\Checks\Signature.cpp" />
     <ClCompile Include="Core\Environment\VM\Checks\Timing.cpp" />
     <ClCompile Include="Core\Environment\VM\Hypercall\Hypercall.cpp" />
+    <ClCompile Include="Core\Environment\VM\Telemetry\VmTelemetry.cpp" />
     <ClCompile Include="Core\Environment\VM\VM.cpp" />
     <ClCompile Include="Core\Identity\Disk\Disk.cpp" />
     <ClCompile Include="Core\Identity\Disk\SMART\Smart.cpp" />
@@ -148,6 +149,7 @@
     <ClInclude Include="Core\Environment\VM\Checks\Timing.h" />
     <ClInclude Include="Core\Environment\VM\Hypercall\Defs.h" />
     <ClInclude Include="Core\Environment\VM\Hypercall\Hypercall.h" />
+    <ClInclude Include="Core\Environment\VM\Telemetry\VmTelemetry.h" />
     <ClInclude Include="Core\Environment\VM\VM.h" />
     <ClInclude Include="Core\Identity\Disk\Disk.h" />
     <ClInclude Include="Core\Identity\Disk\SMART\Smart.h" />
