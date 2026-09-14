@@ -1,11 +1,11 @@
 #include <Misc/Incl.h>
 
-int main( )
+BOOL WINAPI DllMain( HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved )
 {
     // Initialize the module...
     //
 
     printf( "Hello, world!\n" );
 
-    return 0;
+    return TRUE;
 }

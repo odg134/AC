@@ -65,6 +65,9 @@
     <ClCompile Include="Core\Dispatch\Handlers\ALPC\ALPC.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Core\Dispatch\Packet\Packet.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Core\Dispatch\Dispatch.h">
@@ -119,6 +122,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Core\Dispatch\Handlers\ALPC\ALPC.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Dispatch\Packet\Packet.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
