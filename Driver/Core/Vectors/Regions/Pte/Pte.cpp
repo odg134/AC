@@ -1,34 +1,25 @@
 #include <Misc/Incl.h>
+#pragma pack(push)
+#include <ntimage.h>
+#pragma pack(pop)
+#include <Misc/Libraries/Zydis/Zydis.h>
 #include <Core/Vectors/Regions/Pte/Pte.h>
 
 namespace Regions::Pte
 {
     static ULONG64 g_PteBase = 0;
 
-    // Byte pattern for MiGetPteAddress (19 bytes); the next 8 bytes are the PTE base immediate.
-    // Matches: shr rcx,9 / mov rax,7FFFFFFFF8h / and rcx,rax / mov rax,<PTE_BASE>
-    //
-    static constexpr UCHAR Pattern[] = {
-        0x48, 0xC1, 0xE9, 0x09,
-        0x48, 0xB8, 0xF8, 0xFF, 0xFF, 0xFF, 0x7F, 0x00, 0x00, 0x00,
-        0x48, 0x23, 0xC8,
-        0x48, 0xB8
-    };
-    static constexpr ULONG PatternLen = sizeof( Pattern );
-
-    // Minimal KLDR_DATA_TABLE_ENTRY for walking PsLoadedModuleList.
-    //
     struct KldrEntry
     {
-        LIST_ENTRY     InLoadOrderLinks;   // +0x000
-        PVOID          ExceptionTable;     // +0x010
-        ULONG          ExceptionTableSize; // +0x018
-        ULONG          Pad0;               // +0x01C
-        PVOID          GpValue;            // +0x020
-        PVOID          NonPagedDebugInfo;  // +0x028
-        PVOID          DllBase;            // +0x030
-        PVOID          EntryPoint;         // +0x038
-        ULONG          SizeOfImage;        // +0x040
+        LIST_ENTRY InLoadOrderLinks;
+        PVOID      ExceptionTable;
+        ULONG      ExceptionTableSize;
+        ULONG      Pad0;
+        PVOID      GpValue;
+        PVOID      NonPagedDebugInfo;
+        PVOID      DllBase;
+        PVOID      EntryPoint;
+        ULONG      SizeOfImage;
     };
 
     extern "C" NTKERNELAPI LIST_ENTRY PsLoadedModuleList;
@@ -50,29 +41,95 @@ namespace Regions::Pte
             return STATUS_NOT_FOUND;
 
         auto* Dos = reinterpret_cast< IMAGE_DOS_HEADER* >( Base );
-        auto* Nt  = reinterpret_cast< IMAGE_NT_HEADERS* >( Base + Dos->e_lfanew );
+        if ( Dos->e_magic != IMAGE_DOS_SIGNATURE )
+            return STATUS_NOT_FOUND;
 
-        ULONG ScanSize = Nt->OptionalHeader.SizeOfCode;
-        ULONG64 CodeStart = reinterpret_cast< ULONG64 >( Base ) + Nt->OptionalHeader.BaseOfCode;
+        auto* Nt = reinterpret_cast< IMAGE_NT_HEADERS* >( Base + Dos->e_lfanew );
+        if ( Nt->Signature != IMAGE_NT_SIGNATURE )
+            return STATUS_NOT_FOUND;
 
-        for ( ULONG i = 0; i + PatternLen + 8 < ScanSize; ++i )
+        PIMAGE_SECTION_HEADER Sec = IMAGE_FIRST_SECTION( Nt );
+        ULONG64 TextStart = 0;
+        ULONG64 TextEnd   = 0;
+
+        for ( USHORT i = 0; i < Nt->FileHeader.NumberOfSections; ++i )
         {
-            auto* Ptr = reinterpret_cast< UCHAR* >( CodeStart + i );
-            bool Match = true;
-            for ( ULONG j = 0; j < PatternLen; ++j )
+            if ( RtlCompareMemory( Sec[i].Name, ".text", 5 ) == 5 )
             {
-                if ( Ptr[j] != Pattern[j] )
-                {
-                    Match = false;
-                    break;
-                }
+                TextStart = reinterpret_cast< ULONG64 >( Base ) + Sec[i].VirtualAddress;
+                TextEnd   = TextStart + Sec[i].Misc.VirtualSize;
+                break;
             }
-            if ( Match )
+        }
+
+        if ( !TextStart )
+            return STATUS_NOT_FOUND;
+
+        ZydisDecoder Decoder;
+        ZydisDecoderInit( &Decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64 );
+
+        for ( ULONG64 Va = TextStart; Va < TextEnd; )
+        {
+            ZydisDecodedInstruction I1;
+            ZydisDecodedOperand O1[ZYDIS_MAX_OPERAND_COUNT];
+
+            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( &Decoder, reinterpret_cast< void* >( Va ), TextEnd - Va, &I1, O1 ) ) )
             {
-                g_PteBase = *reinterpret_cast< ULONG64* >( Ptr + PatternLen );
-                LogTrace( "Regions: PTE base = {}", reinterpret_cast< void* >( g_PteBase ) );
-                return STATUS_SUCCESS;
+                Va++; continue;
             }
+
+            // SHR RCX, 9
+            if ( I1.mnemonic != ZYDIS_MNEMONIC_SHR ||
+                 O1[0].type != ZYDIS_OPERAND_TYPE_REGISTER ||
+                 O1[0].reg.value != ZYDIS_REGISTER_RCX ||
+                 O1[1].type != ZYDIS_OPERAND_TYPE_IMMEDIATE ||
+                 O1[1].imm.value.u != 9 )
+            {
+                Va += I1.length; continue;
+            }
+
+            ULONG64 N = Va + I1.length;
+
+            ZydisDecodedInstruction I2, I3, I4;
+            ZydisDecodedOperand O2[ZYDIS_MAX_OPERAND_COUNT],
+                                O3[ZYDIS_MAX_OPERAND_COUNT],
+                                O4[ZYDIS_MAX_OPERAND_COUNT];
+
+            // MOV RAX, 7FFFFFFFF8h
+            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( &Decoder, reinterpret_cast< void* >( N ), TextEnd - N, &I2, O2 ) ) ||
+                 I2.mnemonic != ZYDIS_MNEMONIC_MOV ||
+                 O2[0].reg.value != ZYDIS_REGISTER_RAX ||
+                 O2[1].type != ZYDIS_OPERAND_TYPE_IMMEDIATE ||
+                 O2[1].imm.value.u != 0x7FFFFFFFF8ULL )
+            {
+                Va += I1.length; continue;
+            }
+
+            N += I2.length;
+
+            // AND RCX, RAX
+            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( &Decoder, reinterpret_cast< void* >( N ), TextEnd - N, &I3, O3 ) ) ||
+                 I3.mnemonic != ZYDIS_MNEMONIC_AND ||
+                 O3[0].reg.value != ZYDIS_REGISTER_RCX ||
+                 O3[1].reg.value != ZYDIS_REGISTER_RAX )
+            {
+                Va += I1.length; continue;
+            }
+
+            N += I3.length;
+
+            // MOV RAX, <PTE_BASE>
+            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( &Decoder, reinterpret_cast< void* >( N ), TextEnd - N, &I4, O4 ) ) ||
+                 I4.mnemonic != ZYDIS_MNEMONIC_MOV ||
+                 O4[0].reg.value != ZYDIS_REGISTER_RAX ||
+                 O4[1].type != ZYDIS_OPERAND_TYPE_IMMEDIATE )
+            {
+                Va += I1.length; continue;
+            }
+
+            g_PteBase = O4[1].imm.value.u;
+            LogTrace( "Regions: PTE base = {}", reinterpret_cast< void* >( g_PteBase ) );
+            return STATUS_SUCCESS;
         }
 
         return STATUS_NOT_FOUND;
@@ -117,17 +174,11 @@ namespace Regions::Pte
             PteAddressOf( PteAddressOf( PteAddressOf( PteAddressOf( reinterpret_cast< ULONG64 >( Va ) ) ) ) ) );
     }
 
-    /// <summary>
-    /// Returns true when the PTE indicates a present, executable page.
-    /// </summary>
     bool IsExecutable( const HardwarePte& Pte )
     {
         return Pte.Present && !Pte.NoExecute;
     }
 
-    /// <summary>
-    /// Returns true when the PTE indicates a present, writable, executable page.
-    /// </summary>
     bool IsRwx( const HardwarePte& Pte )
     {
         return Pte.Present && Pte.Writable && !Pte.NoExecute;
