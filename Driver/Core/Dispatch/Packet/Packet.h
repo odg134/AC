@@ -12,6 +12,7 @@ namespace Packet
         Vm        = 2,
         Regions   = 3,
         Integrity = 4,
+        Drivers   = 5,
     };
 
 #pragma pack(push, 1)

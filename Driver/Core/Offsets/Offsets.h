@@ -16,10 +16,10 @@ namespace Offsets
     inline UINT64* WmipSMBiosTablePhysicalAddress{};
     inline UINT32* WmipSMBiosTableLength{};
      
-    inline PVOID* MmUnloadedDrivers{};      
-    inline ULONG* MmLastUnloadedDriver{};  
-    inline PVOID  HashBucketsList{};         
-    inline ULONG* HashBucketsCount{};     
+    inline PVOID* MmUnloadedDrivers{};
+    inline ULONG* MmLastUnloadedDriver{};
+    inline PVOID  PiDDBCacheTable{};
+    inline PVOID  PiDDBLock{};
 
     // ndis.sys NDIS internals resolved via pattern scanning.
     //

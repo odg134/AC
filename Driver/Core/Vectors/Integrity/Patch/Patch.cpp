@@ -232,7 +232,7 @@ namespace Integrity::Patch
         if ( !Mod.FullPath[0] )
             return;
 
-        // Skip ntoskrnl — its text section is enormous and it has many fixups.
+        // Skip ntoskrnl | its text section is enormous and it has many fixups.
         //
         const CHAR* Name = Scan::BaseName( Mod );
         if ( _strnicmp( Name, "ntoskrnl.exe", 12 ) == 0 ||

@@ -787,7 +787,7 @@ namespace Offsets
         if ( !NT_SUCCESS( Status ) )
             LogWarn( "Offsets: SMBIOS globals not resolved ({})", Status );
 
-        // NDIS offsets — scan ndis.sys independently.
+        // NDIS offsets | scan ndis.sys independently.
         //
         Util::DriverInfo NdisInfo{};
         if ( Util::QueryDriver( "ndis.sys", &NdisInfo ) )

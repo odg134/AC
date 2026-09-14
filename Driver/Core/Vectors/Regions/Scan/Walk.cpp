@@ -50,7 +50,7 @@ namespace Regions::Scan
                 continue;
             }
 
-            // PML4E — 512 GB granularity.
+            // PML4E | 512 GB granularity.
             //
             Pte::HardwarePte* Pml4e = Pte::GetPml4e( reinterpret_cast< PVOID >( Va ) );
             if ( !MmIsAddressValid( Pml4e ) || !Pml4e->Present )
@@ -59,7 +59,7 @@ namespace Regions::Scan
                 continue;
             }
 
-            // PDPTE — 1 GB granularity.
+            // PDPTE | 1 GB granularity.
             //
             Pte::HardwarePte* Pdpte = Pte::GetPdpte( reinterpret_cast< PVOID >( Va ) );
             if ( !Pdpte->Present )
@@ -74,7 +74,7 @@ namespace Regions::Scan
                 continue;
             }
 
-            // PDE — 2 MB granularity.
+            // PDE | 2 MB granularity.
             //
             Pte::HardwarePte* Pde = Pte::GetPde( reinterpret_cast< PVOID >( Va ) );
             if ( !Pde->Present )
@@ -89,7 +89,7 @@ namespace Regions::Scan
                 continue;
             }
 
-            // PTE — walk all 512 entries in this 2 MB region.
+            // PTE | walk all 512 entries in this 2 MB region.
             //
             ULONG64 Aligned = Va & ~( Step2M - 1 );
             for ( ULONG64 PtVa = Aligned; PtVa < Aligned + Step2M && Buffer.Count < MaxFindings; PtVa += PAGE_SIZE )

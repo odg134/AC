@@ -135,7 +135,7 @@ namespace Integrity::CodeCave
                 continue;
             }
 
-            // Uncovered non-padding byte — measure the run.
+            // Uncovered non-padding byte | measure the run.
             //
             ULONG Start = i;
             while ( i < TextVirtSize )

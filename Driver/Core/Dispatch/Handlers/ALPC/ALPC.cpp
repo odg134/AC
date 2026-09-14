@@ -188,7 +188,7 @@ static void ServerThread( PVOID )
         if ( ( Msg->u2.s2.Type & 0x3FF ) != LPC_CONNECTION_REQUEST )
             continue;
 
-        // Accept the client — one at a time
+        // Accept the client | one at a time
         //
         HANDLE CommPort = nullptr;
         S = ZwAlpcAcceptConnectPort( &CommPort, ServerPort, 0, nullptr, nullptr, nullptr, Msg, nullptr, TRUE );
