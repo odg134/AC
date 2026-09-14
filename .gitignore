@@ -3,3 +3,4 @@ Bin/
 *.user
 *.VC.db
 *.VC.opendb
+/Backend/node_modules
