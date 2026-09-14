@@ -19,7 +19,7 @@ ULONG64 Disk::HashSerial( const char* Serial )
     while ( Serial[Len] ) ++Len;
 
     return Hash::Argon2i(
-        reinterpret_cast<const UCHAR*>( Serial ), Len,
+        reinterpret_cast< const UCHAR* >( Serial ), Len,
         SerialSalt, sizeof( SerialSalt ),
         1, 8 );
 }
@@ -35,16 +35,16 @@ ULONG64 Disk::HashSerial( const char* Serial )
 NTSTATUS Disk::OpenDisk( ULONG Index, PFILE_OBJECT* FileObj, PDEVICE_OBJECT* DevObj )
 {
     wchar_t NameBuf[64]{};
-    ULONG   Pos = 0;
+    ULONG Pos = 0;
 
-    auto AppendWcs = [&]( const wchar_t* Src ) { while ( *Src ) NameBuf[Pos++] = *Src++; };
-    auto AppendNum = [&]( ULONG N )
-    {
-        if ( N == 0 ) { NameBuf[Pos++] = L'0'; return; }
-        wchar_t Tmp[10]; ULONG Len = 0;
-        while ( N > 0 ) { Tmp[Len++] = L'0' + static_cast<wchar_t>( N % 10 ); N /= 10; }
-        while ( Len > 0 ) NameBuf[Pos++] = Tmp[--Len];
-    };
+    auto AppendWcs = [&] ( const wchar_t* Src ) { while ( *Src ) NameBuf[Pos++] = *Src++; };
+    auto AppendNum = [&] ( ULONG N )
+        {
+            if ( N == 0 ) { NameBuf[Pos++] = L'0'; return; }
+            wchar_t Tmp[10]; ULONG Len = 0;
+            while ( N > 0 ) { Tmp[Len++] = L'0' + static_cast< wchar_t >( N % 10 ); N /= 10; }
+            while ( Len > 0 ) NameBuf[Pos++] = Tmp[--Len];
+        };
 
     AppendWcs( L"\\Device\\Harddisk" ); AppendNum( Index );
     AppendWcs( L"\\DR" );              AppendNum( Index );
@@ -59,19 +59,21 @@ NTSTATUS Disk::OpenDisk( ULONG Index, PFILE_OBJECT* FileObj, PDEVICE_OBJECT* Dev
 /// Enumerate all physical disks and collect serials via multiple independent methods.
 /// </summary>
 /// <returns></returns>
-NTSTATUS Disk::Collect()
+NTSTATUS Disk::Collect( )
 {
     m_Count = 0;
-    m_Hash  = 0;
+    m_Hash = 0;
 
     for ( ULONG i = 0; i < MaxDisks; ++i )
     {
-        PFILE_OBJECT   FileObj = nullptr;
-        PDEVICE_OBJECT DevObj  = nullptr;
+        PFILE_OBJECT FileObj = nullptr;
+        PDEVICE_OBJECT DevObj = nullptr;
 
         NTSTATUS Status = OpenDisk( i, &FileObj, &DevObj );
         if ( !NT_SUCCESS( Status ) )
             break;
+
+        Log( "Disk: opened disk {}", i );
 
         DiskSerial Entry{};
 
@@ -81,6 +83,11 @@ NTSTATUS Disk::Collect()
             char Serial[21]{};
             Smart::ExtractIdentifySerial( IdentifyBuf, Serial, sizeof( Serial ) );
             Entry.HashAta = HashSerial( Serial );
+            Log( "Disk: [{}] ATA serial -> {}", i, Serial );
+        }
+        else
+        {
+            LogWarn( "Disk: [{}] ATA identify failed", i );
         }
 
         UCHAR StorageBuf[Smart::StorageDescriptorBufferSize]{};
@@ -88,8 +95,18 @@ NTSTATUS Disk::Collect()
         {
             const char* StorageSerial = Smart::ExtractStorageSerial( StorageBuf, sizeof( StorageBuf ) );
             if ( StorageSerial )
+            {
                 Entry.HashStorage = HashSerial( StorageSerial );
+                Log( "Disk: [{}] storage serial -> {}", i, StorageSerial );
+            }
         }
+        else
+        {
+            LogWarn( "Disk: [{}] storage query failed", i );
+        }
+
+        if ( Entry.HashAta && Entry.HashStorage && Entry.HashAta != Entry.HashStorage )
+            LogWarn( "Disk: [{}] serial mismatch detected", i );
 
         Entry.Valid = true;
         m_Serials[m_Count++] = Entry;
@@ -108,6 +125,7 @@ NTSTATUS Disk::Collect()
         m_Hash ^= ( m_Serials[i].HashStorage << 13 ) | ( m_Serials[i].HashStorage >> 51 );
     }
 
+    Log( "Disk: {} disk(s) collected", m_Count );
     return m_Count > 0 ? STATUS_SUCCESS : STATUS_NOT_FOUND;
 }
 
@@ -115,7 +133,7 @@ NTSTATUS Disk::Collect()
 /// Returns a combined hash of all collected disk serials.
 /// </summary>
 /// <returns></returns>
-ULONG64 Disk::Hash() const
+ULONG64 Disk::Hash( ) const
 {
     return m_Hash;
 }
@@ -124,7 +142,7 @@ ULONG64 Disk::Hash() const
 /// Returns true if any disk reports different serials across collection methods.
 /// </summary>
 /// <returns></returns>
-bool Disk::IsMismatch() const
+bool Disk::IsMismatch( ) const
 {
     for ( ULONG i = 0; i < m_Count; ++i )
     {
@@ -145,7 +163,7 @@ bool Disk::IsMismatch() const
 /// Number of physical disks found during Collect().
 /// </summary>
 /// <returns></returns>
-ULONG Disk::Count() const
+ULONG Disk::Count( ) const
 {
     return m_Count;
 }

@@ -94,6 +94,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Core\Dispatch\Dispatch.cpp" />
+    <ClCompile Include="Core\Dispatch\Handlers\ALPC\ALPC.cpp" />
+    <ClCompile Include="Core\Dispatch\Handlers\IOCTL\IOCTL.cpp" />
     <ClCompile Include="Core\Environment\Environment.cpp" />
     <ClCompile Include="Core\Environment\PG\PG.cpp" />
     <ClCompile Include="Core\Environment\VM\VM.cpp" />
@@ -112,6 +114,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Core\Dispatch\Dispatch.h" />
+    <ClInclude Include="Core\Dispatch\Handlers\ALPC\ALPC.h" />
+    <ClInclude Include="Core\Dispatch\Handlers\IOCTL\IOCTL.h" />
     <ClInclude Include="Core\Environment\Environment.h" />
     <ClInclude Include="Core\Environment\PG\PG.h" />
     <ClInclude Include="Core\Environment\VM\VM.h" />

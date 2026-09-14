@@ -1,5 +1,7 @@
 #include <Misc/Incl.h>
+#pragma pack(push)
 #include <ntimage.h>
+#pragma pack(pop)
 #include <Misc/Util/Util.h>
 #include <Misc/Libraries/Zydis/Zydis.h>
 #include "Offsets.h"
@@ -16,8 +18,12 @@ namespace Offsets
 
     static bool FindTextSection( PVOID Base, UINT64* OutStart, UINT64* OutSize )
     {
-        PIMAGE_NT_HEADERS Nt = RtlImageNtHeader( Base );
-        if ( !Nt )
+        auto* Dos = (PIMAGE_DOS_HEADER)Base;
+        if ( Dos->e_magic != IMAGE_DOS_SIGNATURE )
+            return false;
+
+        auto* Nt = (PIMAGE_NT_HEADERS)( (PUCHAR)Base + Dos->e_lfanew );
+        if ( Nt->Signature != IMAGE_NT_SIGNATURE )
             return false;
 
         PIMAGE_SECTION_HEADER Sec = IMAGE_FIRST_SECTION( Nt );

@@ -3,6 +3,7 @@
 
 namespace Smart
 {
+
     static constexpr ULONG IOCTL_ATA_PASS_THROUGH = 0x0004D02Cu;
     static constexpr ULONG IOCTL_STORAGE_QUERY_PROPERTY = 0x002D1400u;
 
@@ -28,13 +29,13 @@ namespace Smart
     /// <returns></returns>
     static NTSTATUS SendIoctl(
         PDEVICE_OBJECT Target,
-        ULONG          IoctlCode,
-        PVOID          InBuf,
-        ULONG          InLen,
-        PVOID          OutBuf,
-        ULONG          OutLen )
+        ULONG IoctlCode,
+        PVOID InBuf,
+        ULONG InLen,
+        PVOID OutBuf,
+        ULONG OutLen )
     {
-        KEVENT          Event{};
+        KEVENT Event{};
         IO_STATUS_BLOCK Iosb{};
 
         KeInitializeEvent( &Event, NotificationEvent, FALSE );
@@ -83,6 +84,8 @@ namespace Smart
         NTSTATUS Status = SendIoctl( Target, IOCTL_ATA_PASS_THROUGH, Request, TotalSize, Request, TotalSize );
         if ( NT_SUCCESS( Status ) )
             RtlCopyMemory( Buffer, Request + sizeof( AtaPassThroughEx ), IdentifyBufferSize );
+        else
+            LogWarn( "Smart: ATA identify failed: {}", Status );
 
         return Status;
     }
@@ -98,7 +101,10 @@ namespace Smart
     NTSTATUS QueryStorageDescriptor( PDEVICE_OBJECT Target, UCHAR* Buffer, ULONG BufferSize )
     {
         StoragePropertyQuery Query{};
-        return SendIoctl( Target, IOCTL_STORAGE_QUERY_PROPERTY, &Query, sizeof( Query ), Buffer, BufferSize );
+        NTSTATUS Status = SendIoctl( Target, IOCTL_STORAGE_QUERY_PROPERTY, &Query, sizeof( Query ), Buffer, BufferSize );
+        if ( !NT_SUCCESS( Status ) )
+            LogWarn( "Smart: storage query failed: {}", Status );
+        return Status;
     }
 
     /// <summary>
@@ -148,4 +154,5 @@ namespace Smart
 
         return reinterpret_cast< const char* >( Buffer + Desc->SerialNumberOffset );
     }
+
 }
