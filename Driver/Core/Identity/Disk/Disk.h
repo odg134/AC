@@ -38,6 +38,7 @@ public:
     /// </summary>
     /// <returns></returns>
     ULONG Count() const;
+    ULONG FillSerials( DiskSerial* Out, ULONG Max ) const;
 
 private:
     static ULONG64  HashSerial( const char* Serial );

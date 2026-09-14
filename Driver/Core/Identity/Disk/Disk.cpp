@@ -167,3 +167,14 @@ ULONG Disk::Count( ) const
 {
     return m_Count;
 }
+
+ULONG Disk::FillSerials( DiskSerial* Out, ULONG Max ) const
+{
+    ULONG Written = 0;
+    for ( ULONG I = 0; I < m_Count && Written < Max; ++I )
+    {
+        if ( m_Serials[I].Valid )
+            Out[Written++] = m_Serials[I];
+    }
+    return Written;
+}

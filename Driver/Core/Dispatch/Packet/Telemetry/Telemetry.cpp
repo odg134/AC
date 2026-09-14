@@ -3,19 +3,31 @@
 
 namespace Telemetry
 {
-    // Build a telemetry packet...
-    //
     Packet::Raw Build( const Source& Src )
     {
         Packet::Raw Pkt{};
-
         auto* Pay = reinterpret_cast< HwidPayload* >( Pkt.Payload );
-        Pay->Count = Src.Id->Fill( Pay->Hashes, Identity::MaxEntries );
-        Pay->DiskMismatch = Src.DiskMismatch ? TRUE : FALSE;
+
+        Pay->IdentityCount = Src.Id->Fill( Pay->Hashes, Identity::MaxEntries );
+
+        // Send all disks...
+        //
+        Disk::DiskSerial Serials[Disk::MaxDisks]{};
+        Pay->DiskCount = Src.DiskInfo->FillSerials( Serials, Disk::MaxDisks );
+
+        for ( ULONG I = 0; I < Pay->DiskCount; ++I )
+        {
+            Pay->Disks[I].HashAta = Serials[I].HashAta;
+            Pay->Disks[I].HashStorage = Serials[I].HashStorage;
+            Pay->Disks[I].Mismatch =
+                ( Serials[I].HashAta && Serials[I].HashStorage &&
+                    Serials[I].HashAta != Serials[I].HashStorage ) ? TRUE : FALSE;
+        }
 
         LARGE_INTEGER Now;
         KeQuerySystemTime( &Now );
 
+        // Setup the packet data...
         Pkt.Hdr.Magic = Packet::Magic;
         Pkt.Hdr.PacketType = Packet::Type::Hwid;
         Pkt.Hdr.Version = 1;

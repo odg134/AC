@@ -6,20 +6,26 @@
 
 namespace Telemetry
 {
-    // Carrier for all identity data needed to build a telemetry packet.
-    //
     struct Source
     {
         const Identity* Id;
-        bool DiskMismatch;
+        const Disk*     DiskInfo;
     };
 
     #pragma pack(push, 1)
+    struct DiskEntry
+    {
+        ULONG64 HashAta;
+        ULONG64 HashStorage;
+        BOOLEAN Mismatch;
+    };
+
     struct HwidPayload
     {
-        ULONG   Count;
-        ULONG64 Hashes[Identity::MaxEntries];
-        BOOLEAN DiskMismatch;
+        ULONG     IdentityCount;
+        ULONG64   Hashes[Identity::MaxEntries];
+        ULONG     DiskCount;
+        DiskEntry Disks[Disk::MaxDisks];
     };
     #pragma pack(pop)
 

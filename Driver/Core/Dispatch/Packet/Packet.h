@@ -4,7 +4,7 @@
 namespace Packet
 {
     static constexpr UINT32 Magic = 0xAC010000;
-    static constexpr ULONG  MaxPayload = 256;
+    static constexpr ULONG  MaxPayload = 512;
 
     enum class Type : UINT16
     {

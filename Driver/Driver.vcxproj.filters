@@ -74,6 +74,9 @@
     <ClCompile Include="Core\Dispatch\Packet\Queue\Queue.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Core\Dispatch\Packet\Crypto\Crypto.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Core\Dispatch\Dispatch.h">
@@ -137,6 +140,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Core\Dispatch\Packet\Queue\Queue.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Dispatch\Packet\Crypto\Crypto.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
