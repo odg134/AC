@@ -1,8 +1,8 @@
 #include <Misc/Incl.h>
 #include <Core/Thread/Thread.h>
 
-namespace Thread {
-
+namespace Thread
+{
     static KEVENT StopEvent;
     static PKTHREAD Kthread;
 

@@ -94,19 +94,37 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Core\Dispatch\Dispatch.cpp" />
+    <ClCompile Include="Core\Environment\Environment.cpp" />
+    <ClCompile Include="Core\Environment\PG\PG.cpp" />
     <ClCompile Include="Core\Identity\Disk\Disk.cpp" />
+    <ClCompile Include="Core\Identity\Disk\SMART\Smart.cpp" />
     <ClCompile Include="Core\Identity\Identity.cpp" />
     <ClCompile Include="Core\Main.cpp" />
+    <ClCompile Include="Core\Mem\Mem.cpp" />
+    <ClCompile Include="Core\Mem\Pool\Pool.cpp" />
+    <ClCompile Include="Core\Offsets\Offsets.cpp" />
     <ClCompile Include="Core\Thread\Thread.cpp" />
+    <ClCompile Include="Misc\Hash\Hash.cpp" />
+    <ClCompile Include="Misc\Libraries\Zydis\Zydis.c" />
     <ClCompile Include="Misc\Log\Log.cpp" />
+    <ClCompile Include="Misc\Util\Util.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Core\Dispatch\Dispatch.h" />
+    <ClInclude Include="Core\Environment\Environment.h" />
+    <ClInclude Include="Core\Environment\PG\PG.h" />
     <ClInclude Include="Core\Identity\Disk\Disk.h" />
+    <ClInclude Include="Core\Identity\Disk\SMART\Smart.h" />
     <ClInclude Include="Core\Identity\Identity.h" />
+    <ClInclude Include="Core\Mem\Mem.h" />
+    <ClInclude Include="Core\Mem\Pool\Pool.h" />
+    <ClInclude Include="Core\Offsets\Offsets.h" />
     <ClInclude Include="Core\Thread\Thread.h" />
+    <ClInclude Include="Misc\Hash\Hash.h" />
     <ClInclude Include="Misc\Incl.h" />
+    <ClInclude Include="Misc\Libraries\Zydis\Zydis.h" />
     <ClInclude Include="Misc\Log\Log.h" />
+    <ClInclude Include="Misc\Util\Util.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

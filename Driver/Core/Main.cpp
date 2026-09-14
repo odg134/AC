@@ -1,6 +1,7 @@
 #include <Misc/Incl.h>
 #include <Core/Dispatch/Dispatch.h>
 #include <Core/Thread/Thread.h>
+#include <Core/Offsets/Offsets.h>
 
 DRIVER_UNLOAD DriverUnload;
 
@@ -59,6 +60,15 @@ DriverEntry(
     DriverObject->MajorFunction[IRP_MJ_CREATE] = DispatchCreate;
     DriverObject->MajorFunction[IRP_MJ_CLOSE] = DispatchClose;
     DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = DispatchControl;
+
+    Status = Offsets::Init();
+    if ( !NT_SUCCESS( Status ) )
+    {
+        LogError( "Offsets::Init failed: {}", Status );
+        IoDeleteSymbolicLink( &Symlink );
+        IoDeleteDevice( DeviceObject );
+        return Status;
+    }
 
     // Setup the main worker thread...
     //
