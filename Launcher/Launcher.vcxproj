@@ -86,6 +86,7 @@
     <ClCompile Include="Core\Crypto\Crypto.cpp" />
     <ClCompile Include="Core\Http\Http.cpp" />
     <ClCompile Include="Core\Main.cpp" />
+    <ClCompile Include="Core\Mapper\Mapper.cpp" />
     <ClCompile Include="Core\Splash\Splash.cpp" />
   </ItemGroup>
   <ItemGroup>
