@@ -3,6 +3,7 @@
 #include <Core/Environment/Environment.h>
 #include <Core/Identity/Identity.h>
 #include <Core/Identity/Disk/Disk.h>
+#include <Core/Identity/Network/Network.h>
 #include <Core/Dispatch/Packet/Telemetry/Telemetry.h>
 #include <Core/Dispatch/Packet/Queue/Queue.h>
 #include <Core/Dispatch/Packet/Crypto/Crypto.h>
@@ -14,6 +15,7 @@ namespace Thread
 
     static Identity HwidTable;
     static Disk     DiskCollector;
+    static Network  NetworkCollector;
 
     static constexpr ULONG CheckEvery = 50;   //5s(Env checks)
     static constexpr ULONG CollectEvery = 300;  //30s(hwid + telemetry)
@@ -27,7 +29,13 @@ namespace Thread
         if ( Hash && !HwidTable.Contains( Hash ) )
             HwidTable.Add( Hash );
 
-        Telemetry::Source Src{ &HwidTable, &DiskCollector };
+        NetworkCollector.Collect( );
+
+        ULONG64 NetHash = NetworkCollector.Hash( );
+        if ( NetHash && !HwidTable.Contains( NetHash ) )
+            HwidTable.Add( NetHash );
+
+        Telemetry::Source Src{ &HwidTable, &DiskCollector, nullptr, &NetworkCollector };
         Packet::Raw Pkt = Telemetry::Build( Src );
 
         // Encrypt payload before the packet enters the queue

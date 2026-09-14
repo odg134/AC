@@ -3,12 +3,12 @@ import { decryptPayload } from "./crypto";
 export const PACKET_MAGIC = 0xac010000;
 const HEADER_SIZE = 24;
 
-// Payload layout (all little-endian):
+// Payload layout (all little-endian, #pragma pack(1)):
 //   +0   ULONG  identityCount
-//   +4   ULONG64[8] hashes
+//   +4   ULONG64[8] hashes (64 bytes)
 //   +68  ULONG  diskCount
 //   +72  DiskEntry[8]  (each 17 bytes: hashAta:8, hashStorage:8, mismatch:1)
-//   +208 SmbiosEntry
+//   +208 SmbiosEntry (240 bytes)
 //     +0   UUID[16]
 //     +16  systemSerial:8
 //     +24  baseboardSerial:8
@@ -17,9 +17,13 @@ const HEADER_SIZE = 24;
 //     +44  processorHashes[8]:64
 //     +108 memoryCount:4
 //     +112 memoryHashes[16]:128
-//   Total: 208 + 240 = 448 bytes
+//   +448 ULONG  networkCount
+//   +452 NetworkEntry[2]  (each 17 bytes: hashCurrentMac:8, hashPermanentMac:8, macMismatch:1)
+//   +486 DnsData (hashDomain:8, hashHostname:8)
+//   Total: 502 bytes
 
-const SMBIOS_OFF = 208;
+const SMBIOS_OFF   = 208;
+const NETWORK_OFF  = 448;
 
 export interface ParsedPacket {
   header: {
@@ -45,6 +49,12 @@ export interface ParsedPacket {
     processorHashes: bigint[];
     memoryCount: number;
     memoryHashes: bigint[];
+  };
+  network: {
+    networkCount: number;
+    adapters: { hashCurrentMac: bigint; hashPermanentMac: bigint; macMismatch: boolean }[];
+    hashDnsDomain: bigint;
+    hashDnsHostname: bigint;
   };
 }
 
@@ -112,6 +122,20 @@ export function parsePacket(raw: Uint8Array): ParsedPacket {
     memoryHashes.push(pv.getBigUint64(so + 112 + i * 8, true));
   }
 
+  const no = NETWORK_OFF;
+  const networkCount = pv.getUint32(no, true);
+  const adapters: ParsedPacket["network"]["adapters"] = [];
+  for (let i = 0; i < Math.min(networkCount, 2); i++) {
+    const base = no + 4 + i * 17;
+    adapters.push({
+      hashCurrentMac:   pv.getBigUint64(base,      true),
+      hashPermanentMac: pv.getBigUint64(base + 8,  true),
+      macMismatch:      pv.getUint8(base + 16) !== 0,
+    });
+  }
+  const hashDnsDomain   = pv.getBigUint64(no + 4 + 2 * 17,     true);
+  const hashDnsHostname = pv.getBigUint64(no + 4 + 2 * 17 + 8, true);
+
   return {
     header,
     hwid: { identityCount, hashes, diskCount, disks },
@@ -125,5 +149,6 @@ export function parsePacket(raw: Uint8Array): ParsedPacket {
       memoryCount,
       memoryHashes,
     },
+    network: { networkCount, adapters, hashDnsDomain, hashDnsHostname },
   };
 }
