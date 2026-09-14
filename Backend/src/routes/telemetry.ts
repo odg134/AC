@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/client";
-import { sessions, telemetry, users } from "../db/schema";
+import { sessions, telemetry, users, hwidBans } from "../db/schema";
 import { parsePacket } from "../packet/parse";
 import { recordDetection } from "../services/detection";
 import { resetHeartbeat } from "../services/watchdog";
@@ -70,6 +70,12 @@ router.post("/:token", async (c) => {
   if (!user) return c.json({ error: "user not found" }, 500);
 
   if (!user.hwidFingerprint) {
+    const [hwidBan] = await db.select({ fingerprint: hwidBans.fingerprint })
+      .from(hwidBans).where(eq(hwidBans.fingerprint, sortedFp)).limit(1);
+    if (hwidBan) {
+      await recordDetection(session.id, session.userId, "hwid_change", { reason: "hwid_banned" });
+      return c.json({ ok: false, reason: "hwid_banned" });
+    }
     await db.update(users).set({ hwidFingerprint: sortedFp }).where(eq(users.id, session.userId));
   } else if (user.hwidFingerprint !== sortedFp) {
     await recordDetection(session.id, session.userId, "hwid_change", {

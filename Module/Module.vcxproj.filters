@@ -14,9 +14,15 @@
     <ClCompile Include="Core\Main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Core\ALPC\ALPC.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Misc\Incl.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\ALPC\ALPC.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

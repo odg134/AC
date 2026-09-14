@@ -33,6 +33,12 @@ export const telemetry = sqliteTable("telemetry", {
   receivedAt: integer("received_at").notNull(),
 });
 
+export const hwidBans = sqliteTable("hwid_bans", {
+  fingerprint: text("fingerprint").primaryKey(),
+  bannedAt: integer("banned_at").notNull(),
+  reason: text("reason"),
+});
+
 export const detections = sqliteTable("detections", {
   id: text("id").primaryKey(),
   sessionId: text("session_id").notNull().references(() => sessions.id),

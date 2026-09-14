@@ -39,6 +39,11 @@ sqlite.exec(`
     disks TEXT NOT NULL,
     received_at INTEGER NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS hwid_bans (
+    fingerprint TEXT PRIMARY KEY,
+    banned_at INTEGER NOT NULL,
+    reason TEXT
+  );
   CREATE TABLE IF NOT EXISTS detections (
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL REFERENCES sessions(id),

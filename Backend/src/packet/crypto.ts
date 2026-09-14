@@ -40,12 +40,18 @@ function nonceFromSeq(seq: number): Uint8Array {
   return n;
 }
 
-export function decryptPayload(data: Uint8Array, seq: number): void {
-  const nonce = nonceFromSeq(seq);
+export const LAUNCHER_KEY = new Uint8Array([
+  0xb3, 0x7e, 0x2a, 0xc9, 0x5f, 0x01, 0xd8, 0x44,
+  0xa6, 0x3c, 0x88, 0xf2, 0x17, 0xeb, 0x6d, 0x93,
+  0x4a, 0xb0, 0xcc, 0x71, 0x29, 0x5e, 0x87, 0x3f,
+  0xd1, 0x94, 0x62, 0xac, 0x0e, 0x57, 0xf9, 0x26,
+]);
+
+function chacha20(data: Uint8Array, key: Uint8Array, nonce: Uint8Array): void {
   const state = new Uint32Array(16);
   state[0] = 0x61707865; state[1] = 0x3320646e;
   state[2] = 0x79622d32; state[3] = 0x6b206574;
-  for (let i = 0; i < 8; i++) state[4 + i] = load32le(SESSION_KEY, i * 4);
+  for (let i = 0; i < 8; i++) state[4 + i] = load32le(key, i * 4);
   state[12] = 0;
   state[13] = load32le(nonce, 0);
   state[14] = load32le(nonce, 4);
@@ -58,4 +64,18 @@ export function decryptPayload(data: Uint8Array, seq: number): void {
     const chunk = Math.min(64, data.length - off);
     for (let i = 0; i < chunk; i++) data[off + i] ^= ks[i];
   }
+}
+
+export function encryptBuffer(data: Uint8Array, key: Uint8Array): Uint8Array {
+  const nonce = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = new Uint8Array(data);
+  chacha20(encrypted, key, nonce);
+  const out = new Uint8Array(12 + encrypted.length);
+  out.set(nonce);
+  out.set(encrypted, 12);
+  return out;
+}
+
+export function decryptPayload(data: Uint8Array, seq: number): void {
+  chacha20(data, SESSION_KEY, nonceFromSeq(seq));
 }

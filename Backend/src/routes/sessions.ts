@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/client";
-import { sessions, users } from "../db/schema";
+import { sessions, users, hwidBans } from "../db/schema";
 import { auth } from "../middleware/auth";
 import { clearHeartbeat } from "../services/watchdog";
 
@@ -12,9 +12,16 @@ router.use("*", auth);
 router.post("/start", async (c) => {
   const userId = c.get("userId");
 
-  const [user] = await db.select({ bannedAt: users.bannedAt }).from(users).where(eq(users.id, userId)).limit(1);
+  const [user] = await db.select({ bannedAt: users.bannedAt, hwidFingerprint: users.hwidFingerprint })
+    .from(users).where(eq(users.id, userId)).limit(1);
   if (!user) return c.json({ error: "user not found" }, 404);
   if (user.bannedAt) return c.json({ error: "banned" }, 403);
+
+  if (user.hwidFingerprint) {
+    const [hwidBan] = await db.select({ fingerprint: hwidBans.fingerprint })
+      .from(hwidBans).where(eq(hwidBans.fingerprint, user.hwidFingerprint)).limit(1);
+    if (hwidBan) return c.json({ error: "banned" }, 403);
+  }
 
   const [active] = await db.select({ id: sessions.id })
     .from(sessions)
