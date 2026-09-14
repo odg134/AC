@@ -89,7 +89,7 @@ namespace Splash
                 HFONT Font = CreateFontW( 22, 0, 0, 0, FW_NORMAL,
                     FALSE, FALSE, FALSE, DEFAULT_CHARSET,
                     OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                    CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI" );
+                    CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Arial" );
                 HGDIOBJ OldFont = SelectObject( MemDc, Font );
 
                 SetTextColor( MemDc, RGB( 220, 55, 55 ) );
@@ -132,7 +132,7 @@ namespace Splash
                 HFONT Font = CreateFontW( 16, 0, 0, 0, FW_NORMAL,
                     FALSE, FALSE, FALSE, DEFAULT_CHARSET,
                     OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                    CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI" );
+                    CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Arial" );
                 HGDIOBJ OldFont = SelectObject( MemDc, Font );
 
                 SetTextColor( MemDc, InError ? RGB( 180, 180, 180 ) : RGB( 55, 55, 55 ) );
