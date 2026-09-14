@@ -10,8 +10,14 @@ namespace VM::Signature
     bool HvBitPresent( );
 
     /// <summary>
-    /// Returns true when the hypervisor vendor string, interface ID,
-    /// and sentinel exclusion all match genuine Hyper-V.
+    /// Returns true when the vendor string from CPUID(0x40000000) equals "Microsoft Hv".
+    /// </summary>
+    /// <returns></returns>
+    bool VendorIsHyperV( );
+
+    /// <summary>
+    /// Returns true when CPUID(0x40000001).EAX equals the Hyper-V interface ID
+    /// and is not the sentinel value ntoskrnl uses to suppress HV detection.
     /// </summary>
     /// <returns></returns>
     bool IsHyperV( );

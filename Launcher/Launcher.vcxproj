@@ -84,6 +84,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Core\Crypto\Crypto.cpp" />
+    <ClCompile Include="Core\Driver\Driver.cpp" />
     <ClCompile Include="Core\Http\Http.cpp" />
     <ClCompile Include="Core\Main.cpp" />
     <ClCompile Include="Core\Mapper\Mapper.cpp" />

@@ -2,12 +2,14 @@
 #include <Core/Environment/VM/VM.h>
 #include <Core/Environment/VM/Checks/Timing.h>
 #include <Core/Environment/VM/Checks/Signature.h>
-#include <Core/Environment/VM/Checks/AntiSpoof.h>
+#include <Core/Environment/VM/Telemetry/VmTelemetry.h>
+#include <Core/Dispatch/Packet/Queue/Queue.h>
 
 namespace VM
 {
     /// <summary>
-    /// Runs the full hypervisor/Hyper-V detection stack.
+    /// Runs the full hypervisor detection stack and enqueues a telemetry packet
+    /// with all raw detection values. The backend determines whether to act.
     /// </summary>
     /// <returns></returns>
     NTSTATUS Check( )
@@ -15,22 +17,11 @@ namespace VM
         if ( !Timing::ConfirmsHypervisor( ) && !Signature::HvBitPresent( ) )
             return STATUS_SUCCESS;
 
-        if ( !Signature::IsHyperV( ) )
-        {
-            LogWarn( "VM: unrecognised hypervisor" );
-            return STATUS_UNSUCCESSFUL;
-        }
+        Packet::Raw Pkt = Telemetry::Build( );
 
-        ULONG Score = AntiSpoof::ComputeScore( );
-        LogTrace( "VM: anti-spoof score {}", Score );
+        if ( !Packet::g_Queue.Enqueue( Pkt ) )
+            LogWarn( "VM: telemetry queue full" );
 
-        if ( Score < 4 )
-        {
-            LogWarn( "VM: spoofed Hyper-V (score {})", Score );
-            return STATUS_UNSUCCESSFUL;
-        }
-
-        Log( "VM: genuine Hyper-V (score {})", Score );
         return STATUS_SUCCESS;
     }
 }
