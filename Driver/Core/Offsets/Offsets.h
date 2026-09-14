@@ -36,5 +36,8 @@ namespace Offsets
     inline UINT32 NdisIfPermMacLen{};     // USHORT: permanent (burned-in) MAC length
     inline UINT32 NdisIfPermMac{};        // UCHAR[32]: permanent MAC address bytes
 
+    inline UINT32 EprocessProtectionOffset{};
+    inline UINT32 ObjTypeCallbackListOffset{};
+
     NTSTATUS Init( );
 }

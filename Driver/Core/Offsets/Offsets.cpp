@@ -742,6 +742,134 @@ namespace Offsets
         return STATUS_NOT_FOUND;
     }
 
+    // Find EPROCESS.Protection offset by scanning PsIsProtectedProcess.
+    // Pattern: MOVZX EAX, BYTE PTR [RCX + X]  where X in [0x200, 0x1000],
+    // followed within 5 instructions by TEST/AND on AL/EAX against 0x07 or 0x01.
+    //
+    static NTSTATUS ResolveEprocessProtectionOffset( ZydisDecoder* Decoder )
+    {
+        UINT64 Fn = GetRoutine( L"PsIsProtectedProcess" );
+        if ( !Fn )
+        {
+            LogWarn( "Offsets: PsIsProtectedProcess not exported" );
+            return STATUS_NOT_FOUND;
+        }
+
+        constexpr UINT64 ScanLimit = 64;
+
+        for ( UINT64 Va = Fn; Va < Fn + ScanLimit; )
+        {
+            ZydisDecodedInstruction Instr;
+            ZydisDecodedOperand Ops[ZYDIS_MAX_OPERAND_COUNT];
+
+            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, reinterpret_cast< void* >( Va ),
+                Fn + ScanLimit - Va, &Instr, Ops ) ) )
+            {
+                Va++; continue;
+            }
+
+            // MOVZX EAX, BYTE PTR [RCX + disp32]
+            if ( Instr.mnemonic == ZYDIS_MNEMONIC_MOVZX &&
+                 Ops[0].type == ZYDIS_OPERAND_TYPE_REGISTER &&
+                 Ops[0].reg.value == ZYDIS_REGISTER_EAX &&
+                 Ops[1].type == ZYDIS_OPERAND_TYPE_MEMORY &&
+                 Ops[1].mem.base == ZYDIS_REGISTER_RCX &&
+                 Ops[1].mem.disp.has_displacement &&
+                 Ops[1].size == 8 )
+            {
+                INT64 Disp = Ops[1].mem.disp.value;
+                if ( Disp >= 0x200 && Disp <= 0x1000 )
+                {
+                    // Verify followed by AND/TEST on AL or EAX within 5 instructions.
+                    UINT64 N = Va + Instr.length;
+                    for ( int Step = 0; Step < 5 && N < Fn + ScanLimit; ++Step )
+                    {
+                        ZydisDecodedInstruction Nx;
+                        ZydisDecodedOperand     NOps[ZYDIS_MAX_OPERAND_COUNT];
+                        if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, reinterpret_cast< void* >( N ),
+                            Fn + ScanLimit - N, &Nx, NOps ) ) )
+                            break;
+
+                        bool IsAndTest = ( Nx.mnemonic == ZYDIS_MNEMONIC_AND ||
+                                           Nx.mnemonic == ZYDIS_MNEMONIC_TEST ) &&
+                                         NOps[0].type == ZYDIS_OPERAND_TYPE_REGISTER &&
+                                         ( NOps[0].reg.value == ZYDIS_REGISTER_EAX ||
+                                           NOps[0].reg.value == ZYDIS_REGISTER_AL );
+
+                        if ( IsAndTest )
+                        {
+                            EprocessProtectionOffset = static_cast< UINT32 >( Disp );
+                            Log( "Offsets: EprocessProtectionOffset -> {}", Disp );
+                            return STATUS_SUCCESS;
+                        }
+
+                        N += Nx.length;
+                    }
+                }
+            }
+
+            Va += Instr.length;
+        }
+
+        LogWarn( "Offsets: EprocessProtectionOffset not found" );
+        return STATUS_NOT_FOUND;
+    }
+
+    // Find _OBJECT_TYPE.CallbackList offset by scanning ObRegisterCallbacks.
+    // Pattern: LEA R??, [R?? + disp] where disp in [0x100, 0x280] applied to a
+    // pointer that was loaded from an ObjectType argument.
+    // Fallback: 0x158 (stable Win10 1903 – Win11 24H2).
+    //
+    static void ResolveObjTypeCallbackListOffset( ZydisDecoder* Decoder )
+    {
+        UINT64 Fn = GetRoutine( L"ObRegisterCallbacks" );
+        if ( !Fn )
+        {
+            ObjTypeCallbackListOffset = 0x158;
+            Log( "Offsets: ObjTypeCallbackListOffset -> 0x158 (fallback, ObRegisterCallbacks not found)" );
+            return;
+        }
+
+        constexpr UINT64 ScanLimit = 512;
+
+        for ( UINT64 Va = Fn; Va < Fn + ScanLimit; )
+        {
+            ZydisDecodedInstruction Instr;
+            ZydisDecodedOperand Ops[ZYDIS_MAX_OPERAND_COUNT];
+
+            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, reinterpret_cast< void* >( Va ),
+                Fn + ScanLimit - Va, &Instr, Ops ) ) )
+            {
+                Va++; continue;
+            }
+
+            // LEA reg64, [reg64 + disp] in [0x100, 0x280]
+            if ( Instr.mnemonic == ZYDIS_MNEMONIC_LEA &&
+                 Ops[0].type == ZYDIS_OPERAND_TYPE_REGISTER &&
+                 Ops[0].size == 64 &&
+                 Ops[1].type == ZYDIS_OPERAND_TYPE_MEMORY &&
+                 Ops[1].mem.disp.has_displacement &&
+                 Ops[1].mem.base != ZYDIS_REGISTER_RIP &&
+                 Ops[1].mem.base != ZYDIS_REGISTER_RSP &&
+                 Ops[1].mem.base != ZYDIS_REGISTER_RBP &&
+                 Ops[1].mem.index == ZYDIS_REGISTER_NONE )
+            {
+                INT64 Disp = Ops[1].mem.disp.value;
+                if ( Disp >= 0x100 && Disp <= 0x280 )
+                {
+                    ObjTypeCallbackListOffset = static_cast< UINT32 >( Disp );
+                    Log( "Offsets: ObjTypeCallbackListOffset -> {}", Disp );
+                    return;
+                }
+            }
+
+            Va += Instr.length;
+        }
+
+        ObjTypeCallbackListOffset = 0x158;
+        Log( "Offsets: ObjTypeCallbackListOffset -> 0x158 (fallback)" );
+    }
+
     /// <summary>
     /// Resolves all kernel offsets used by the driver.
     /// </summary>
