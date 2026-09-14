@@ -1,5 +1,6 @@
 #include <Misc/Incl.h>
 #include <Core/Dispatch/Dispatch.h>
+#include <Core/Dispatch/Handlers/ALPC/ALPC.h>
 #include <Core/Thread/Thread.h>
 #include <Core/Offsets/Offsets.h>
 
@@ -11,6 +12,7 @@ DRIVER_UNLOAD DriverUnload;
 /// <param name="DriverObject"></param>
 void DriverUnload( PDRIVER_OBJECT DriverObject )
 {
+    ALPC::Stop();
     Thread::Stop();
 
     UNICODE_STRING Symlink = RTL_CONSTANT_STRING( L"\\DosDevices\\AC_Driver" );
@@ -76,6 +78,16 @@ DriverEntry(
     if ( !NT_SUCCESS( Status ) )
     {
         LogError( "Thread::Start failed: {}", Status );
+        IoDeleteSymbolicLink( &Symlink );
+        IoDeleteDevice( DeviceObject );
+        return Status;
+    }
+
+    Status = ALPC::Start();
+    if ( !NT_SUCCESS( Status ) )
+    {
+        LogError( "ALPC::Start failed: {}", Status );
+        Thread::Stop();
         IoDeleteSymbolicLink( &Symlink );
         IoDeleteDevice( DeviceObject );
         return Status;
