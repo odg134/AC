@@ -81,6 +81,35 @@ namespace Thread
             {
                 Environment::Check( );
                 Regions::Scan( );
+
+                if ( !Process::Guard::Integrity::Validate( ) )
+                    LogWarn( "Thread: ObCallback integrity check failed — tampering detected" );
+            }
+
+            if ( Ticks % ProcDrainEvery == 0 )
+            {
+                ULONG Pid = Process::GetProtectedPid( );
+                if ( Pid )
+                {
+                    Process::Telemetry::AccessEvent Evs[Process::Telemetry::MaxEvents]{};
+                    ULONG Count = Process::Guard::DrainEvents( Evs, Process::Telemetry::MaxEvents );
+
+                    if ( Count )
+                    {
+                        Packet::Raw Pkt = Process::Telemetry::Build( Pid, Evs, Count );
+                        Crypto::Nonce N = Crypto::NonceFromSequence( Pkt.Hdr.Sequence );
+                        Crypto::Encrypt( Pkt.Payload, Pkt.Hdr.PayloadSize, Crypto::SessionKey, N );
+                        Packet::g_Queue.Enqueue( Pkt );
+                        Log( "Thread: process telemetry enqueued ({} event(s))", Count );
+                    }
+                }
+            }
+
+            if ( Ticks % PplSnapshotEvery == 0 )
+            {
+                ULONG Pid = Process::GetProtectedPid( );
+                if ( Pid )
+                    PPL::Snapshot( Pid );
             }
 
             if ( Ticks % CollectEvery == 0 )

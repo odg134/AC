@@ -4,6 +4,8 @@
 #include <Core/Thread/Thread.h>
 #include <Core/Offsets/Offsets.h>
 #include <Core/Mem/Mem.h>
+#include <Core/Process/Process.h>
+#include <Core/Vectors/PPL/PPL.h>
 #include <Core/Vectors/Regions/Regions.h>
 
 DRIVER_UNLOAD DriverUnload;
@@ -16,6 +18,8 @@ void DriverUnload( PDRIVER_OBJECT DriverObject )
 {
     ALPC::Stop();
     Thread::Stop();
+    Process::Shutdown();
+    PPL::Shutdown();
     Mem::Shutdown();
 
     UNICODE_STRING Symlink = RTL_CONSTANT_STRING( L"\\DosDevices\\AC_Driver" );
@@ -103,10 +107,35 @@ DriverEntry(
         return Status;
     }
 
+    Status = Process::Init();
+    if ( !NT_SUCCESS( Status ) )
+    {
+        LogError( "Process::Init failed: {}", Status );
+        Thread::Stop();
+        Mem::Shutdown();
+        IoDeleteSymbolicLink( &Symlink );
+        IoDeleteDevice( DeviceObject );
+        return Status;
+    }
+
+    Status = PPL::Init();
+    if ( !NT_SUCCESS( Status ) )
+    {
+        LogError( "PPL::Init failed: {}", Status );
+        Process::Shutdown();
+        Thread::Stop();
+        Mem::Shutdown();
+        IoDeleteSymbolicLink( &Symlink );
+        IoDeleteDevice( DeviceObject );
+        return Status;
+    }
+
     Status = ALPC::Start();
     if ( !NT_SUCCESS( Status ) )
     {
         LogError( "ALPC::Start failed: {}", Status );
+        PPL::Shutdown();
+        Process::Shutdown();
         Thread::Stop();
         Mem::Shutdown();
         IoDeleteSymbolicLink( &Symlink );
