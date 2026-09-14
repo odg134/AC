@@ -83,9 +83,17 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Core\Crypto\Crypto.cpp" />
+    <ClCompile Include="Core\Http\Http.cpp" />
     <ClCompile Include="Core\Main.cpp" />
+    <ClCompile Include="Core\Splash\Splash.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Core\Crypto\Crypto.h" />
+    <ClInclude Include="Core\Driver\Driver.h" />
+    <ClInclude Include="Core\Http\Http.h" />
+    <ClInclude Include="Core\Mapper\Mapper.h" />
+    <ClInclude Include="Core\Splash\Splash.h" />
     <ClInclude Include="Misc\Incl.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

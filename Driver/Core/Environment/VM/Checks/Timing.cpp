@@ -6,14 +6,13 @@
 namespace VM::Timing
 {
     /// <summary>
-    /// Returns true when the minimum CPUID cycle count across several samples
-    /// exceeds the bare-metal ceiling, conclusively indicating a hypervisor.
+    /// Returns the minimum RDTSC delta across several CPUID leaf 1 samples.
     /// </summary>
     /// <returns></returns>
-    bool ConfirmsHypervisor( )
+    ULONG64 MeasureMinCycles( )
     {
         constexpr ULONG Samples = 16;
-        ULONG64 Min = (ULONG64)-1;
+        ULONG64 Min = MAXULONG64;
         int Unused[4];
 
         __cpuid( Unused, 0 );
@@ -28,6 +27,16 @@ namespace VM::Timing
                 Min = Delta;
         }
 
-        return Min > Hypercall::TimingInterceptThreshold;
+        return Min;
+    }
+
+    /// <summary>
+    /// Returns true when MeasureMinCycles() exceeds the bare-metal ceiling,
+    /// conclusively indicating a hypervisor.
+    /// </summary>
+    /// <returns></returns>
+    bool ConfirmsHypervisor( )
+    {
+        return MeasureMinCycles( ) > Hypercall::TimingInterceptThreshold;
     }
 }

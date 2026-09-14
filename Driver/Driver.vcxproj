@@ -114,9 +114,13 @@
     <ClCompile Include="Core\Identity\Network\Mac\Mac.cpp" />
     <ClCompile Include="Core\Identity\Network\Network.cpp" />
     <ClCompile Include="Core\Identity\Network\Nic\Nic.cpp" />
+    <ClCompile Include="Core\Identity\SMBIOS\Parser\Parser.cpp" />
+    <ClCompile Include="Core\Identity\SMBIOS\SMBIOS.cpp" />
     <ClCompile Include="Core\Identity\SMBIOS\Tables\Baseboard\Baseboard.cpp" />
     <ClCompile Include="Core\Identity\SMBIOS\Tables\Bios\Bios.cpp" />
     <ClCompile Include="Core\Identity\SMBIOS\Tables\Chassis\Chassis.cpp" />
+    <ClCompile Include="Core\Identity\SMBIOS\Tables\Memory\Memory.cpp" />
+    <ClCompile Include="Core\Identity\SMBIOS\Tables\Processor\Processor.cpp" />
     <ClCompile Include="Core\Identity\SMBIOS\Tables\System\System.cpp" />
     <ClCompile Include="Core\Identity\SMBIOS\Tables\Tables.cpp" />
     <ClCompile Include="Core\Main.cpp" />
@@ -152,9 +156,13 @@
     <ClInclude Include="Core\Identity\Network\Mac\Mac.h" />
     <ClInclude Include="Core\Identity\Network\Network.h" />
     <ClInclude Include="Core\Identity\Network\Nic\Nic.h" />
+    <ClInclude Include="Core\Identity\SMBIOS\Parser\Parser.h" />
+    <ClInclude Include="Core\Identity\SMBIOS\SMBIOS.h" />
     <ClInclude Include="Core\Identity\SMBIOS\Tables\Baseboard\Baseboard.h" />
     <ClInclude Include="Core\Identity\SMBIOS\Tables\Bios\Bios.h" />
     <ClInclude Include="Core\Identity\SMBIOS\Tables\Chassis\Chassis.h" />
+    <ClInclude Include="Core\Identity\SMBIOS\Tables\Memory\Memory.h" />
+    <ClInclude Include="Core\Identity\SMBIOS\Tables\Processor\Processor.h" />
     <ClInclude Include="Core\Identity\SMBIOS\Tables\System\System.h" />
     <ClInclude Include="Core\Identity\SMBIOS\Tables\Tables.h" />
     <ClInclude Include="Core\Mem\Mem.h" />

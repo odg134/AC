@@ -9,6 +9,7 @@ namespace Packet
     enum class Type : UINT16
     {
         Hwid = 1,
+        Vm   = 2,
     };
 
 #pragma pack(push, 1)

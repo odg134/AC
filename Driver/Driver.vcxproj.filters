@@ -116,6 +116,18 @@
     <ClCompile Include="Core\Identity\Network\Network.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Core\Identity\SMBIOS\Parser\Parser.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Identity\SMBIOS\Tables\Memory\Memory.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Identity\SMBIOS\Tables\Processor\Processor.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Identity\SMBIOS\SMBIOS.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Core\Dispatch\Dispatch.h">
@@ -224,6 +236,18 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Core\Identity\Network\Network.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Identity\SMBIOS\Parser\Parser.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Identity\SMBIOS\Tables\Memory\Memory.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Identity\SMBIOS\Tables\Processor\Processor.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Identity\SMBIOS\SMBIOS.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

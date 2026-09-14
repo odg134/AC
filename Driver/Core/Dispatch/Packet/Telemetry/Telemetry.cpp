@@ -23,23 +23,26 @@ namespace Telemetry
                     Serials[I].HashAta != Serials[I].HashStorage ) ? TRUE : FALSE;
         }
 
-        auto& SE  = Pay->SmbiosData;
-        auto& Smb = *Src.SmbiosInfo;
+        if ( Src.SmbiosInfo )
+        {
+            auto& SE  = Pay->SmbiosData;
+            auto& Smb = *Src.SmbiosInfo;
 
-        if ( Smb.SystemData( ).Valid )
-            RtlCopyMemory( SE.SystemUUID, Smb.SystemData( ).UUID, 16 );
+            if ( Smb.SystemData( ).Valid )
+                RtlCopyMemory( SE.SystemUUID, Smb.SystemData( ).UUID, 16 );
 
-        SE.SystemSerial    = Smb.Hashes( ).SystemSerial;
-        SE.BaseboardSerial = Smb.Hashes( ).BaseboardSerial;
-        SE.ChassisSerial   = Smb.Hashes( ).ChassisSerial;
+            SE.SystemSerial    = Smb.Hashes( ).SystemSerial;
+            SE.BaseboardSerial = Smb.Hashes( ).BaseboardSerial;
+            SE.ChassisSerial   = Smb.Hashes( ).ChassisSerial;
 
-        SE.ProcessorCount = Smb.ProcessorData( ).Count;
-        RtlCopyMemory( SE.ProcessorHashes, Smb.Hashes( ).ProcessorIds,
-            SE.ProcessorCount * sizeof( ULONG64 ) );
+            SE.ProcessorCount = Smb.ProcessorData( ).Count;
+            RtlCopyMemory( SE.ProcessorHashes, Smb.Hashes( ).ProcessorIds,
+                SE.ProcessorCount * sizeof( ULONG64 ) );
 
-        SE.MemoryCount = Smb.MemoryData( ).Count;
-        RtlCopyMemory( SE.MemoryHashes, Smb.Hashes( ).MemorySerials,
-            SE.MemoryCount * sizeof( ULONG64 ) );
+            SE.MemoryCount = Smb.MemoryData( ).Count;
+            RtlCopyMemory( SE.MemoryHashes, Smb.Hashes( ).MemorySerials,
+                SE.MemoryCount * sizeof( ULONG64 ) );
+        }
 
         if ( Src.NetworkInfo )
         {
