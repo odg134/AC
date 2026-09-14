@@ -1,6 +1,7 @@
 #include <Misc/Incl.h>
 #include <Core/Thread/Thread.h>
 #include <Core/Environment/Environment.h>
+#include <Core/Vectors/Regions/Regions.h>
 #include <Core/Identity/Identity.h>
 #include <Core/Identity/Disk/Disk.h>
 #include <Core/Identity/Network/Network.h>
@@ -70,7 +71,10 @@ namespace Thread
             ++Ticks;
 
             if ( Ticks % CheckEvery == 0 )
+            {
                 Environment::Check( );
+                Regions::Scan( );
+            }
 
             if ( Ticks % CollectEvery == 0 )
                 Collect( );

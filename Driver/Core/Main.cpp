@@ -4,6 +4,7 @@
 #include <Core/Thread/Thread.h>
 #include <Core/Offsets/Offsets.h>
 #include <Core/Mem/Mem.h>
+#include <Core/Vectors/Regions/Regions.h>
 
 DRIVER_UNLOAD DriverUnload;
 
@@ -82,6 +83,12 @@ DriverEntry(
         IoDeleteSymbolicLink( &Symlink );
         IoDeleteDevice( DeviceObject );
         return Status;
+    }
+
+    Status = Regions::Initialize();
+    if ( !NT_SUCCESS( Status ) )
+    {
+        LogWarn( "Regions::Initialize failed ({}), region scans disabled", Status );
     }
 
     // Setup the main worker thread...
