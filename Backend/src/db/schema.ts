@@ -31,6 +31,7 @@ export const telemetry = sqliteTable("telemetry", {
   diskCount: integer("disk_count").notNull(),
   disks: text("disks").notNull(),
   smbios: text("smbios"),
+  network: text("network"),
   receivedAt: integer("received_at").notNull(),
 });
 

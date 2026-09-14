@@ -20,6 +20,8 @@ function buildFingerprint(pkt: ReturnType<typeof parsePacket>): string {
     hashHex(pkt.smbios.chassisSerial),
     ...pkt.smbios.processorHashes.map(hashHex),
     ...pkt.smbios.memoryHashes.map(hashHex),
+    // Permanent MAC is the burned-in hardware address; current MAC may be spoofed.
+    ...pkt.network.adapters.map((a) => hashHex(a.hashPermanentMac)),
   ].filter((h) => h !== "0000000000000000");
 
   return [...all].sort().join(",");
@@ -67,6 +69,16 @@ router.post("/:token", async (c) => {
     memory: pkt.smbios.memoryHashes.map(hashHex),
   });
 
+  const networkJson = JSON.stringify({
+    adapters: pkt.network.adapters.map((a) => ({
+      currentMac:   hashHex(a.hashCurrentMac),
+      permanentMac: hashHex(a.hashPermanentMac),
+      macMismatch:  a.macMismatch,
+    })),
+    dnsDomain:   hashHex(pkt.network.hashDnsDomain),
+    dnsHostname: hashHex(pkt.network.hashDnsHostname),
+  });
+
   await db.insert(telemetry).values({
     id: crypto.randomUUID(),
     sessionId: session.id,
@@ -83,6 +95,7 @@ router.post("/:token", async (c) => {
       })),
     ),
     smbios: smbiosJson,
+    network: networkJson,
     receivedAt: now,
   });
 
@@ -121,6 +134,18 @@ router.post("/:token", async (c) => {
         })),
     });
     return c.json({ ok: false, reason: "disk_mismatch" });
+  }
+
+  if (pkt.network.adapters.some((a) => a.macMismatch)) {
+    await recordDetection(session.id, session.userId, "mac_spoof", {
+      adapters: pkt.network.adapters
+        .filter((a) => a.macMismatch)
+        .map((a) => ({
+          currentMac:   hashHex(a.hashCurrentMac),
+          permanentMac: hashHex(a.hashPermanentMac),
+        })),
+    });
+    return c.json({ ok: false, reason: "mac_spoof" });
   }
 
   return c.json({ ok: true });
