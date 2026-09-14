@@ -915,6 +915,14 @@ namespace Offsets
         if ( !NT_SUCCESS( Status ) )
             LogWarn( "Offsets: SMBIOS globals not resolved ({})", Status );
 
+        // Process protection + ObCallback integrity offsets.
+        //
+        Status = ResolveEprocessProtectionOffset( &Decoder );
+        if ( !NT_SUCCESS( Status ) )
+            LogWarn( "Offsets: EprocessProtectionOffset not resolved ({})", Status );
+
+        ResolveObjTypeCallbackListOffset( &Decoder );
+
         // NDIS offsets | scan ndis.sys independently.
         //
         Util::DriverInfo NdisInfo{};

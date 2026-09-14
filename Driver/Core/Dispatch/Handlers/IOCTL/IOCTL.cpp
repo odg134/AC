@@ -1,4 +1,5 @@
 #include <Misc/Incl.h>
+#include <Core/Process/Process.h>
 #include "IOCTL.h"
 
 /// <summary>
@@ -79,6 +80,8 @@ namespace IOCTL
         ProtectedPid = Req->Pid;
         KeReleaseSpinLock( &PidLock, Irql );
 
+        Process::SetProtectedPid( Req->Pid );
+
         Log( "IOCTL: protecting PID {}", Req->Pid );
         Irp->IoStatus.Information = 0;
         return STATUS_SUCCESS;
@@ -110,6 +113,8 @@ namespace IOCTL
 
         ProtectedPid = 0;
         KeReleaseSpinLock( &PidLock, Irql );
+
+        Process::ClearProtectedPid( Req->Pid );
 
         Log( "IOCTL: unprotecting PID {}", Req->Pid );
         Irp->IoStatus.Information = 0;

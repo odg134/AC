@@ -8,6 +8,11 @@
 #include <Core/Dispatch/Packet/Telemetry/Telemetry.h>
 #include <Core/Dispatch/Packet/Queue/Queue.h>
 #include <Core/Dispatch/Packet/Crypto/Crypto.h>
+#include <Core/Process/Process.h>
+#include <Core/Process/Guard/Guard.h>
+#include <Core/Process/Guard/Integrity/Integrity.h>
+#include <Core/Process/Telemetry/ProcTelemetry.h>
+#include <Core/Vectors/PPL/PPL.h>
 
 namespace Thread
 {
@@ -18,8 +23,10 @@ namespace Thread
     static Disk     DiskCollector;
     static Network  NetworkCollector;
 
-    static constexpr ULONG CheckEvery = 50;   //5s(Env checks)
-    static constexpr ULONG CollectEvery = 300;  //30s(hwid + telemetry)
+    static constexpr ULONG CheckEvery        = 50;   // 5s  (env + integrity checks)
+    static constexpr ULONG CollectEvery      = 300;  // 30s (hwid + telemetry)
+    static constexpr ULONG PplSnapshotEvery  = 100;  // 10s (PPL anomaly scan)
+    static constexpr ULONG ProcDrainEvery    = 20;   // 2s  (process access events)
 
     static void Collect( )
     {
