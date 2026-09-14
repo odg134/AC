@@ -8,9 +8,12 @@ namespace Splash
     static constexpr int  BarH        = 6;
     static constexpr UINT WM_PROGRESS = WM_APP + 1;
     static constexpr UINT WM_QUIT_REQ = WM_APP + 2;
+    static constexpr UINT WM_ERROR    = WM_APP + 3;
 
-    static HWND Hwnd     = nullptr;
-    static int  Progress = 0;
+    static HWND    Hwnd     = nullptr;
+    static int     Progress = 0;
+    static bool    InError  = false;
+    static wchar_t ErrMsg[256] = {};
 
     static LRESULT CALLBACK WndProc( HWND Wnd, UINT Msg, WPARAM Wp, LPARAM Lp )
     {
@@ -26,6 +29,23 @@ namespace Splash
 
         case WM_QUIT_REQ:
             DestroyWindow( Wnd );
+            return 0;
+
+        case WM_ERROR:
+            InError = true;
+            wcscpy_s( ErrMsg, reinterpret_cast< const wchar_t* >( Wp ) );
+            InvalidateRect( Wnd, nullptr, FALSE );
+            return 0;
+
+        case WM_LBUTTONDOWN:
+        case WM_RBUTTONDOWN:
+            if ( InError )
+                DestroyWindow( Wnd );
+            return 0;
+
+        case WM_KEYDOWN:
+            if ( InError && Wp == VK_ESCAPE )
+                DestroyWindow( Wnd );
             return 0;
 
         case WM_PAINT:
