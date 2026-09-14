@@ -80,6 +80,27 @@
     <ClCompile Include="Core\Environment\VM\Hypercall\Hypercall.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Core\Environment\VM\Checks\Signature.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Environment\VM\Checks\Timing.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Environment\VM\Checks\AntiSpoof.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Identity\SMBIOS\Tables\Baseboard\Baseboard.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Identity\SMBIOS\Tables\Bios\Bios.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Identity\SMBIOS\Tables\System\System.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Identity\SMBIOS\Tables\Tables.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Core\Dispatch\Dispatch.h">
@@ -149,6 +170,33 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Core\Environment\VM\Hypercall\Hypercall.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Environment\VM\Checks\AntiSpoof.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Environment\VM\Checks\Signature.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Environment\VM\Checks\Timing.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Environment\VM\Hypercall\Defs.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Identity\SMBIOS\Tables\Baseboard\Baseboard.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Identity\SMBIOS\Tables\Bios\Bios.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Identity\SMBIOS\Tables\Chassis\Chassis.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Identity\SMBIOS\Tables\System\System.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Identity\SMBIOS\Tables\Tables.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

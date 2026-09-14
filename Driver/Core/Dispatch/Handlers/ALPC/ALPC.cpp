@@ -1,10 +1,19 @@
 #include <Misc/Incl.h>
 #include <Core/Dispatch/Packet/Queue/Queue.h>
-#include <ALPC/ALPC.h>
+#include "../../../../../Shared/ALPC/ALPC.h"
 #include "ALPC.h"
 
-// Undocumented ALPC types not in the public WDK headers
+// Undocumented / ntifs-only types not exposed in this build's ntddk.h
 //
+typedef struct _PORT_MESSAGE
+{
+    union { struct { CSHORT DataLength; CSHORT TotalLength; } s1; ULONG Length; } u1;
+    union { struct { CSHORT Type; CSHORT DataInfoOffset; } s2; ULONG ZeroInit; } u2;
+    union { CLIENT_ID ClientId; double DoNotUseThisField; };
+    ULONG MessageId;
+    union { SIZE_T ClientViewSize; ULONG CallbackId; };
+} PORT_MESSAGE, *PPORT_MESSAGE;
+
 typedef struct _ALPC_PORT_ATTRIBUTES
 {
     ULONG Flags;
@@ -27,10 +36,11 @@ typedef struct _ALPC_MESSAGE_ATTRIBUTES
     ULONG ValidAttributes;
 } ALPC_MESSAGE_ATTRIBUTES;
 
-static constexpr ULONG LPC_REQUEST          = 1;
-static constexpr ULONG LPC_CONNECTION_REQUEST = 4;
-static constexpr ULONG LPC_PORT_CLOSED      = 5;
-static constexpr ULONG LPC_CLIENT_DIED      = 6;
+static constexpr ULONG LPC_REQUEST           = 1;
+static constexpr ULONG LPC_REPLY             = 2;
+static constexpr ULONG LPC_PORT_CLOSED       = 5;
+static constexpr ULONG LPC_CLIENT_DIED       = 6;
+static constexpr ULONG LPC_CONNECTION_REQUEST = 10;
 static constexpr ULONG ALPC_MSGFLG_RELEASE_MESSAGE = 0x10000;
 
 extern "C"
@@ -139,7 +149,11 @@ static void ServerThread( PVOID )
     InitializeObjectAttributes( &Attr, &PortName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, nullptr, nullptr );
 
     ALPC_PORT_ATTRIBUTES PortAttr{};
-    PortAttr.MaxMessageLength = sizeof( RplyMsg );
+    PortAttr.SecurityQos.Length               = sizeof( SECURITY_QUALITY_OF_SERVICE );
+    PortAttr.SecurityQos.ImpersonationLevel   = SecurityImpersonation;
+    PortAttr.SecurityQos.ContextTrackingMode  = SECURITY_DYNAMIC_TRACKING;
+    PortAttr.SecurityQos.EffectiveOnly        = FALSE;
+    PortAttr.MaxMessageLength                 = sizeof( RplyMsg );
 
     NTSTATUS Status = ZwAlpcCreatePort( &ServerPort, &Attr, &PortAttr );
     if ( !NT_SUCCESS( Status ) )
@@ -149,7 +163,7 @@ static void ServerThread( PVOID )
         return;
     }
 
-    Log( "ALPC: listening on " AC_ALPC_PORT_NAME );
+    Log( "ALPC: listening on \\RPC Control\\ACPort" );
 
     LARGE_INTEGER Timeout{};
     Timeout.QuadPart = -500LL * 10'000LL;

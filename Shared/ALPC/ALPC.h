@@ -1,7 +1,7 @@
 #pragma once
 
-#ifdef _KERNEL_MODE
-#  include <ntddk.h>
+#ifdef _NTDDK_
+// kernel mode — ntddk.h already included by the TU
 #else
 #  include <windows.h>
 #endif

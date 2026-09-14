@@ -25,7 +25,7 @@ namespace Telemetry
         }
 
         LARGE_INTEGER Now;
-        KeQuerySystemTime( &Now );
+        KeQuerySystemTimePrecise( &Now );
 
         // Setup the packet data...
         Pkt.Hdr.Magic = Packet::Magic;
