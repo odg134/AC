@@ -1,5 +1,5 @@
 #include <Misc/Incl.h>
-#include <ALPC/ALPC.h>
+#include "../../../Shared/ALPC/ALPC.h"
 #include "ALPC.h"
 
 namespace ALPC
@@ -114,7 +114,7 @@ namespace ALPC
     {
         if ( !Connect( ) )
         {
-            printf( "[ALPC] failed to connect to " AC_ALPC_PORT_NAME "\n" );
+            printf( "[ALPC] failed to connect to \\RPC Control\\ACPort\n" );
             return 1;
         }
 
