@@ -83,7 +83,7 @@ NTSTATUS Disk::Collect( )
             char Serial[21]{};
             Smart::ExtractIdentifySerial( IdentifyBuf, Serial, sizeof( Serial ) );
             Entry.HashAta = HashSerial( Serial );
-            Log( "Disk: [{}] ATA serial -> {}", i, Serial );
+            Log( "Disk: [{}] ATA hash -> {}", i, Entry.HashAta );
         }
         else
         {
@@ -97,7 +97,7 @@ NTSTATUS Disk::Collect( )
             if ( StorageSerial )
             {
                 Entry.HashStorage = HashSerial( StorageSerial );
-                Log( "Disk: [{}] storage serial -> {}", i, StorageSerial );
+                Log( "Disk: [{}] storage hash -> {}", i, Entry.HashStorage );
             }
         }
         else

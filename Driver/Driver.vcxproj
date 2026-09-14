@@ -102,6 +102,7 @@
     <ClCompile Include="Core\Dispatch\Packet\Telemetry\Telemetry.cpp" />
     <ClCompile Include="Core\Environment\Environment.cpp" />
     <ClCompile Include="Core\Environment\PG\PG.cpp" />
+    <ClCompile Include="Core\Environment\VM\Hypercall\Hypercall.cpp" />
     <ClCompile Include="Core\Environment\VM\VM.cpp" />
     <ClCompile Include="Core\Identity\Disk\Disk.cpp" />
     <ClCompile Include="Core\Identity\Disk\SMART\Smart.cpp" />
@@ -126,6 +127,7 @@
     <ClInclude Include="Core\Dispatch\Packet\Telemetry\Telemetry.h" />
     <ClInclude Include="Core\Environment\Environment.h" />
     <ClInclude Include="Core\Environment\PG\PG.h" />
+    <ClInclude Include="Core\Environment\VM\Hypercall\Hypercall.h" />
     <ClInclude Include="Core\Environment\VM\VM.h" />
     <ClInclude Include="Core\Identity\Disk\Disk.h" />
     <ClInclude Include="Core\Identity\Disk\SMART\Smart.h" />

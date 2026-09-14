@@ -1,5 +1,6 @@
 #include <Misc/Incl.h>
 #include <Core/Thread/Thread.h>
+#include <Core/Environment/Environment.h>
 #include <Core/Identity/Identity.h>
 #include <Core/Identity/Disk/Disk.h>
 #include <Core/Dispatch/Packet/Telemetry/Telemetry.h>
@@ -14,7 +15,8 @@ namespace Thread
     static Identity HwidTable;
     static Disk     DiskCollector;
 
-    static constexpr ULONG CollectEvery = 300;//Tick every 100ms
+    static constexpr ULONG CheckEvery = 50;   //5s(Env checks)
+    static constexpr ULONG CollectEvery = 300;  //30s(hwid + telemetry)
 
     static void Collect( )
     {
@@ -57,11 +59,13 @@ namespace Thread
             if ( Status == STATUS_SUCCESS )
                 break;
 
-            if ( ++Ticks >= CollectEvery )
-            {
-                Ticks = 0;
+            ++Ticks;
+
+            if ( Ticks % CheckEvery == 0 )
+                Environment::Check( );
+
+            if ( Ticks % CollectEvery == 0 )
                 Collect( );
-            }
         }
 
         Log( "Thread: worker exiting" );
