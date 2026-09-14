@@ -66,6 +66,84 @@ function bytesToHex(view: DataView, off: number, len: number): string {
   return s;
 }
 
+// Integrity payload layout (all LE, #pragma pack(1)):
+//   +0   ULONG  findingCount
+//   +4   Finding[8]  each 48 bytes:
+//     +0  ULONG64 moduleBase
+//     +8  ULONG   offset
+//     +12 ULONG   length
+//     +16 UCHAR   kind  (1=patch 2=cave 3=rwx 4=unbacked)
+//     +17 CHAR[31] moduleName (null-terminated, 0-padded)
+//   Total: 4 + 8*48 = 388 bytes
+
+const INTEGRITY_FINDING_SIZE = 48;
+const INTEGRITY_MAX_FINDINGS = 8;
+
+export interface IntegrityFinding {
+  moduleBase: bigint;
+  offset: number;
+  length: number;
+  kind: number;
+  moduleName: string;
+}
+
+export interface ParsedIntegrityPacket {
+  header: {
+    magic: number;
+    packetType: number;
+    version: number;
+    sequence: number;
+    timestamp: bigint;
+    payloadSize: number;
+  };
+  findings: IntegrityFinding[];
+}
+
+export function parseIntegrityPacket(raw: Uint8Array): ParsedIntegrityPacket {
+  if (raw.length < HEADER_SIZE) throw new Error("packet too small");
+
+  const hv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+  const header = {
+    magic:       hv.getUint32(0, true),
+    packetType:  hv.getUint16(4, true),
+    version:     hv.getUint16(6, true),
+    sequence:    hv.getUint32(8, true),
+    timestamp:   hv.getBigUint64(12, true),
+    payloadSize: hv.getUint32(20, true),
+  };
+
+  if (header.magic !== PACKET_MAGIC) throw new Error("bad magic");
+  if (header.packetType !== 4) throw new Error("not an integrity packet");
+  if (raw.length < HEADER_SIZE + header.payloadSize) throw new Error("truncated");
+
+  const payload = new Uint8Array(header.payloadSize);
+  payload.set(raw.subarray(HEADER_SIZE, HEADER_SIZE + header.payloadSize));
+  decryptPayload(payload, header.sequence);
+
+  const pv = new DataView(payload.buffer);
+  const findingCount = pv.getUint32(0, true);
+  const findings: IntegrityFinding[] = [];
+
+  for (let i = 0; i < Math.min(findingCount, INTEGRITY_MAX_FINDINGS); i++) {
+    const base = 4 + i * INTEGRITY_FINDING_SIZE;
+    const nameBytes: number[] = [];
+    for (let j = 0; j < 31; j++) {
+      const b = pv.getUint8(base + 17 + j);
+      if (b === 0) break;
+      nameBytes.push(b);
+    }
+    findings.push({
+      moduleBase: pv.getBigUint64(base,      true),
+      offset:     pv.getUint32(base + 8,     true),
+      length:     pv.getUint32(base + 12,    true),
+      kind:       pv.getUint8(base + 16),
+      moduleName: String.fromCharCode(...nameBytes),
+    });
+  }
+
+  return { header, findings };
+}
+
 export function parsePacket(raw: Uint8Array): ParsedPacket {
   if (raw.length < HEADER_SIZE) throw new Error("packet too small");
 

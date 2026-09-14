@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { sessions, telemetry, users, hwidBans } from "../db/schema";
-import { parsePacket } from "../packet/parse";
+import { parsePacket, parseIntegrityPacket } from "../packet/parse";
 import { recordDetection } from "../services/detection";
 import { resetHeartbeat } from "../services/watchdog";
 
@@ -27,6 +27,13 @@ function buildFingerprint(pkt: ReturnType<typeof parsePacket>): string {
   return [...all].sort().join(",");
 }
 
+const INTEGRITY_KIND: Record<number, string> = {
+  1: "driver_patch",
+  2: "code_cave",
+  3: "rwx_region",
+  4: "unbacked_exec",
+};
+
 router.post("/:token", async (c) => {
   const token = c.req.param("token");
 
@@ -36,9 +43,42 @@ router.post("/:token", async (c) => {
     .limit(1);
   if (!session) return c.json({ error: "invalid session" }, 404);
 
+  const raw = new Uint8Array(await c.req.arrayBuffer());
+
+  // Peek at the packet type before full parsing so we can dispatch correctly.
+  //
+  if (raw.length >= 6) {
+    const view = new DataView(raw.buffer, raw.byteOffset);
+    const pktType = view.getUint16(4, true);
+
+    if (pktType === 4) {
+      let ipkt;
+      try { ipkt = parseIntegrityPacket(raw); } catch {
+        return c.json({ error: "bad packet" }, 400);
+      }
+
+      await db.update(sessions).set({ lastHeartbeat: Math.floor(Date.now() / 1000) })
+        .where(eq(sessions.id, session.id));
+      resetHeartbeat(session.id, session.userId);
+
+      for (const f of ipkt.findings) {
+        const type = INTEGRITY_KIND[f.kind];
+        if (!type) continue;
+        await recordDetection(session.id, session.userId, type as Parameters<typeof recordDetection>[2], {
+          moduleBase: f.moduleBase.toString(16).padStart(16, "0"),
+          moduleName: f.moduleName || null,
+          offset:     f.offset,
+          length:     f.length,
+        });
+      }
+
+      return c.json({ ok: true });
+    }
+  }
+
   let pkt;
   try {
-    pkt = parsePacket(new Uint8Array(await c.req.arrayBuffer()));
+    pkt = parsePacket(raw);
   } catch {
     return c.json({ error: "bad packet" }, 400);
   }
