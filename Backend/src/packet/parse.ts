@@ -144,6 +144,69 @@ export function parseIntegrityPacket(raw: Uint8Array): ParsedIntegrityPacket {
   return { header, findings };
 }
 
+// Drivers payload layout (all LE, #pragma pack(1)):
+//   +0  ULONG driverCount
+//   +4  DriverEntry[count]  each 17 bytes: hashPath:8, hashName:8, isUnloaded:1
+//   Max 29 entries = 4 + 29*17 = 497 bytes
+
+const DRIVERS_ENTRY_SIZE = 13;
+const DRIVERS_MAX        = 39;
+
+export interface ParsedDriverEntry {
+  hashName: bigint;
+  timeDateStamp: number;
+  isUnloaded: boolean;
+}
+
+export interface ParsedDriversPacket {
+  header: {
+    magic: number;
+    packetType: number;
+    version: number;
+    sequence: number;
+    timestamp: bigint;
+    payloadSize: number;
+  };
+  drivers: ParsedDriverEntry[];
+}
+
+export function parseDriversPacket(raw: Uint8Array): ParsedDriversPacket {
+  if (raw.length < HEADER_SIZE) throw new Error("packet too small");
+
+  const hv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+  const header = {
+    magic:       hv.getUint32(0, true),
+    packetType:  hv.getUint16(4, true),
+    version:     hv.getUint16(6, true),
+    sequence:    hv.getUint32(8, true),
+    timestamp:   hv.getBigUint64(12, true),
+    payloadSize: hv.getUint32(20, true),
+  };
+
+  if (header.magic !== PACKET_MAGIC) throw new Error("bad magic");
+  if (header.packetType !== 5) throw new Error("not a drivers packet");
+  if (raw.length < HEADER_SIZE + header.payloadSize) throw new Error("truncated");
+
+  const payload = new Uint8Array(header.payloadSize);
+  payload.set(raw.subarray(HEADER_SIZE, HEADER_SIZE + header.payloadSize));
+  decryptPayload(payload, header.sequence);
+
+  const pv = new DataView(payload.buffer);
+  const driverCount = pv.getUint32(0, true);
+  const drivers: ParsedDriverEntry[] = [];
+
+  for (let i = 0; i < Math.min(driverCount, DRIVERS_MAX); i++) {
+    const base = 4 + i * DRIVERS_ENTRY_SIZE;
+    drivers.push({
+      hashName:     pv.getBigUint64(base,     true),
+      timeDateStamp: pv.getUint32(base + 8,   true),
+      isUnloaded:   pv.getUint8(base + 12) !== 0,
+    });
+  }
+
+  return { header, drivers };
+}
+
 export function parsePacket(raw: Uint8Array): ParsedPacket {
   if (raw.length < HEADER_SIZE) throw new Error("packet too small");
 

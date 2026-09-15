@@ -2,7 +2,8 @@ import { Hono } from "hono";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/client";
 import { sessions, telemetry, users, hwidBans } from "../db/schema";
-import { parsePacket, parseIntegrityPacket } from "../packet/parse";
+import { parsePacket, parseIntegrityPacket, parseDriversPacket } from "../packet/parse";
+import { checkDrivers } from "../services/blocklist";
 import { recordDetection } from "../services/detection";
 import { resetHeartbeat } from "../services/watchdog";
 
@@ -70,6 +71,28 @@ router.post("/:token", async (c) => {
           offset:     f.offset,
           length:     f.length,
         });
+      }
+
+      return c.json({ ok: true });
+    }
+
+    if (pktType === 5) {
+      let dpkt;
+      try { dpkt = parseDriversPacket(raw); } catch {
+        return c.json({ error: "bad packet" }, 400);
+      }
+
+      await db.update(sessions).set({ lastHeartbeat: Math.floor(Date.now() / 1000) })
+        .where(eq(sessions.id, session.id));
+      resetHeartbeat(session.id, session.userId);
+
+      const hit = checkDrivers(dpkt.drivers);
+      if (hit) {
+        await recordDetection(session.id, session.userId, "vuln_driver", {
+          timeDateStamp: hit.timeDateStamp.toString(16).padStart(8, "0"),
+          isUnloaded: hit.isUnloaded,
+        });
+        return c.json({ ok: false, reason: "vuln_driver" });
       }
 
       return c.json({ ok: true });
