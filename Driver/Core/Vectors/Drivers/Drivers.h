@@ -7,8 +7,8 @@ public:
     static constexpr ULONG MaxEntries = 512;
 
     struct Entry {
-        ULONG64 HashPath;
         ULONG64 HashName;
+        ULONG   TimeDateStamp;
         bool    IsUnloaded;
     };
 
@@ -17,7 +17,7 @@ public:
     ULONG    FillEntries(Entry* Out, ULONG Max) const;
 
 private:
-    void TryAdd(ULONG64 HashPath, ULONG64 HashName, bool IsUnloaded);
+    void TryAdd(ULONG64 HashName, ULONG TimeDateStamp, bool IsUnloaded);
 
     Entry m_Entries[MaxEntries]{};
     ULONG m_Count{};

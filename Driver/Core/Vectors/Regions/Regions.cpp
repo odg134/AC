@@ -26,7 +26,7 @@ namespace Regions
     /// Scans kernel memory for suspicious regions and enqueues a telemetry packet.
     /// </summary>
     /// <returns></returns>
-    NTSTATUS Scan( )
+    NTSTATUS Run( )
     {
         Modules::Snapshot Mods{};
         NTSTATUS Status = Modules::Capture( Mods );
@@ -37,7 +37,7 @@ namespace Regions
         }
 
         Scan::FindingBuffer Buf{};
-        Walk::Execute( Mods, Buf );
+        Scan::Execute( Mods, Buf );
         Scan::CheckPeIntegrity( Mods, Buf );
 
         if ( Buf.Count == 0 )

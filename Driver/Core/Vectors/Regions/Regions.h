@@ -13,5 +13,5 @@ namespace Regions
     /// Scans kernel memory for suspicious regions and enqueues a telemetry packet.
     /// </summary>
     /// <returns></returns>
-    NTSTATUS Scan( );
+    NTSTATUS Run( );
 }

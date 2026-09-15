@@ -8,7 +8,7 @@
 
 namespace Integrity
 {
-    NTSTATUS Scan( FindingList* Out )
+    NTSTATUS Execute( FindingList* Out )
     {
         auto* Modules = Mem::New< Scan::ModuleList >();
         if ( !Modules )

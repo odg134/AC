@@ -33,10 +33,10 @@ NTSTATUS PiDDB::Collect()
         if ( !Entry->DriverName.Buffer || !Entry->DriverName.Length )
             continue;
 
-        m_Entries[m_Count].HashPath = 0;
-        m_Entries[m_Count].HashName = Hash::Blake2b(
+        m_Entries[m_Count].HashName      = Hash::Blake2b(
             reinterpret_cast<const UCHAR*>( Entry->DriverName.Buffer ),
             Entry->DriverName.Length );
+        m_Entries[m_Count].TimeDateStamp = Entry->TimeDateStamp;
         ++m_Count;
     }
 

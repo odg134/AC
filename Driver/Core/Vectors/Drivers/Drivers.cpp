@@ -15,37 +15,37 @@ NTSTATUS Drivers::Collect()
         PsModuleList S;
         S.Collect();
         for ( ULONG I = 0; I < S.Count(); ++I )
-            TryAdd( S.Data()[I].HashPath, S.Data()[I].HashName, false );
+            TryAdd( S.Data()[I].HashName, S.Data()[I].TimeDateStamp, false );
     }
     {
         SysQuery S;
         S.Collect();
         for ( ULONG I = 0; I < S.Count(); ++I )
-            TryAdd( S.Data()[I].HashPath, S.Data()[I].HashName, false );
+            TryAdd( S.Data()[I].HashName, S.Data()[I].TimeDateStamp, false );
     }
     {
         ObDriver S;
         S.Collect();
         for ( ULONG I = 0; I < S.Count(); ++I )
-            TryAdd( S.Data()[I].HashPath, S.Data()[I].HashName, false );
+            TryAdd( S.Data()[I].HashName, S.Data()[I].TimeDateStamp, false );
     }
     {
         SvcReg S;
         S.Collect();
         for ( ULONG I = 0; I < S.Count(); ++I )
-            TryAdd( S.Data()[I].HashPath, S.Data()[I].HashName, false );
+            TryAdd( S.Data()[I].HashName, S.Data()[I].TimeDateStamp, false );
     }
     {
         UnloadedList S;
         S.Collect();
         for ( ULONG I = 0; I < S.Count(); ++I )
-            TryAdd( S.Data()[I].HashPath, S.Data()[I].HashName, true );
+            TryAdd( S.Data()[I].HashName, S.Data()[I].TimeDateStamp, true );
     }
     {
         PiDDB S;
         S.Collect();
         for ( ULONG I = 0; I < S.Count(); ++I )
-            TryAdd( S.Data()[I].HashPath, S.Data()[I].HashName, false );
+            TryAdd( S.Data()[I].HashName, S.Data()[I].TimeDateStamp, false );
     }
 
     Log( "Drivers: collected {} unique entries", m_Count );
@@ -60,7 +60,7 @@ ULONG Drivers::FillEntries( Entry* Out, ULONG Max ) const
     return N;
 }
 
-void Drivers::TryAdd( ULONG64 HashPath, ULONG64 HashName, bool IsUnloaded )
+void Drivers::TryAdd( ULONG64 HashName, ULONG TimeDateStamp, bool IsUnloaded )
 {
     if ( !HashName || m_Count >= MaxEntries )
         return;
@@ -71,9 +71,11 @@ void Drivers::TryAdd( ULONG64 HashPath, ULONG64 HashName, bool IsUnloaded )
         {
             if ( IsUnloaded )
                 m_Entries[I].IsUnloaded = true;
+            if ( TimeDateStamp && !m_Entries[I].TimeDateStamp )
+                m_Entries[I].TimeDateStamp = TimeDateStamp;
             return;
         }
     }
 
-    m_Entries[m_Count++] = { HashPath, HashName, IsUnloaded };
+    m_Entries[m_Count++] = { HashName, TimeDateStamp, IsUnloaded };
 }

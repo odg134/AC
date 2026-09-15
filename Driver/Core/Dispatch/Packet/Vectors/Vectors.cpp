@@ -2,6 +2,7 @@
 #include <Core/Vectors/Drivers/Drivers.h>
 #include "Vectors.h"
 
+
 namespace Vectors
 {
     Packet::Raw Build( const Source& Src )
@@ -11,7 +12,8 @@ namespace Vectors
         Pkt.Hdr.PacketType = Packet::Type::Drivers;
         Pkt.Hdr.Version    = 1;
         Pkt.Hdr.Sequence   = InterlockedIncrement( &Packet::g_Sequence );
-        Pkt.Hdr.Timestamp  = KeQueryInterruptTime();
+        LARGE_INTEGER _Ts; KeQuerySystemTimePrecise( &_Ts );
+        Pkt.Hdr.Timestamp  = static_cast<ULONG64>( _Ts.QuadPart );
 
         auto* Pay = reinterpret_cast<Payload*>( Pkt.Payload );
 
@@ -23,9 +25,9 @@ namespace Vectors
 
             for ( ULONG I = 0; I < Count; ++I )
             {
-                Pay->Drivers[I].HashPath   = Tmp[I].HashPath;
-                Pay->Drivers[I].HashName   = Tmp[I].HashName;
-                Pay->Drivers[I].IsUnloaded = Tmp[I].IsUnloaded ? 1u : 0u;
+                Pay->Drivers[I].HashName      = Tmp[I].HashName;
+                Pay->Drivers[I].TimeDateStamp = Tmp[I].TimeDateStamp;
+                Pay->Drivers[I].IsUnloaded    = Tmp[I].IsUnloaded ? 1u : 0u;
             }
         }
 

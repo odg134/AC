@@ -80,10 +80,10 @@ NTSTATUS SvcReg::Collect()
         if ( Type != 1 && Type != 2 )
             continue;
 
-        m_Entries[m_Count].HashPath = 0;
-        m_Entries[m_Count].HashName = Hash::Blake2b(
+        m_Entries[m_Count].HashName      = Hash::Blake2b(
             reinterpret_cast<const UCHAR*>( SubName.Buffer ),
             SubName.Length );
+        m_Entries[m_Count].TimeDateStamp = 0;
         ++m_Count;
     }
 

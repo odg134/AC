@@ -2,7 +2,7 @@
 #include <Core/Vectors/Regions/Scan/Walk.h>
 #include <Core/Vectors/Regions/Pte/Pte.h>
 
-extern "C" NTKERNELAPI PVOID MmSystemRangeStart;
+extern "C" NTKERNELAPI PVOID const MmSystemRangeStart;
 
 namespace Regions::Scan
 {

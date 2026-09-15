@@ -28,10 +28,10 @@ NTSTATUS UnloadedList::Collect()
         if ( !Drv.Name.Buffer || !Drv.Name.Length || !Drv.UnloadTime.QuadPart )
             continue;
 
-        m_Entries[m_Count].HashPath = 0;
-        m_Entries[m_Count].HashName = Hash::Blake2b(
+        m_Entries[m_Count].HashName      = Hash::Blake2b(
             reinterpret_cast<const UCHAR*>( Drv.Name.Buffer ),
             Drv.Name.Length );
+        m_Entries[m_Count].TimeDateStamp = 0;
         ++m_Count;
     }
 

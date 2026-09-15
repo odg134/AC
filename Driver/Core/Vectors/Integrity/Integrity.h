@@ -55,5 +55,5 @@ namespace Integrity
         }
     };
 
-    NTSTATUS Scan( FindingList* Out );
+    NTSTATUS Execute( FindingList* Out );
 }

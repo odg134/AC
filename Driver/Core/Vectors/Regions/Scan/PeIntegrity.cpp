@@ -1,4 +1,7 @@
 #include <Misc/Incl.h>
+#pragma pack(push)
+#include <ntimage.h>
+#pragma pack(pop)
 #include <Core/Vectors/Regions/Scan/PeIntegrity.h>
 #include <Core/Vectors/Regions/Pte/Pte.h>
 

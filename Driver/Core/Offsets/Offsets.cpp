@@ -16,7 +16,7 @@ namespace Offsets
         return ( UINT64 )MmGetSystemRoutineAddress( &Str );
     }
 
-    static bool FindTextSection( PVOID Base, UINT64* OutStart, UINT64* OutSize )
+    static bool FindNamedSection( PVOID Base, const char* Name, UINT64* OutStart, UINT64* OutSize )
     {
         auto* Dos = (PIMAGE_DOS_HEADER)Base;
         if ( Dos->e_magic != IMAGE_DOS_SIGNATURE )
@@ -27,12 +27,16 @@ namespace Offsets
             return false;
 
         PIMAGE_SECTION_HEADER Sec = IMAGE_FIRST_SECTION( Nt );
+        SIZE_T NameLen = 0;
+        while ( Name[ NameLen ] ) ++NameLen;
+
         for ( USHORT i = 0; i < Nt->FileHeader.NumberOfSections; ++i )
         {
-            if ( RtlCompareMemory( Sec[i].Name, ".text", 5 ) == 5 )
+            if ( RtlCompareMemory( Sec[ i ].Name, Name, NameLen ) == NameLen &&
+                 ( NameLen == 8 || Sec[ i ].Name[ NameLen ] == '\0' ) )
             {
-                *OutStart = ( UINT64 )Base + Sec[i].VirtualAddress;
-                *OutSize = Sec[i].Misc.VirtualSize;
+                *OutStart = ( UINT64 )Base + Sec[ i ].VirtualAddress;
+                *OutSize  = Sec[ i ].Misc.VirtualSize;
                 return true;
             }
         }
@@ -47,97 +51,128 @@ namespace Offsets
         return Abs;
     }
 
-    static bool VerifyKiFilterFiberContextProlog(
-        UINT64 FuncStart, UINT64 Va, UINT64 TextEnd,
-        ZydisDecoder* Decoder, UINT64 AddrKeKeepData )
+    // Count CMP [RIP+x], 0 instructions in the window [Va, Va+WindowSize).
+    // Used to score KiFilterFiberContext candidates — the real function has 3+.
+    //
+    static int CountCmpRipZero( ZydisDecoder* Decoder, UINT64 Va, UINT64 WindowSize )
     {
-        UINT64 Limit = Va + 60;
-        if ( Limit > TextEnd ) Limit = TextEnd;
+        UINT64 End = Va + WindowSize;
+        int Score = 0;
 
-        bool FoundLea = false;
-
-        while ( Va < Limit )
+        while ( Va < End )
         {
             ZydisDecodedInstruction Instr;
             ZydisDecodedOperand Ops[ZYDIS_MAX_OPERAND_COUNT];
 
-            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )Va, Limit - Va, &Instr, Ops ) ) )
-                break;
-
-            if ( !FoundLea &&
-                Instr.mnemonic == ZYDIS_MNEMONIC_LEA &&
-                Ops[0].type == ZYDIS_OPERAND_TYPE_REGISTER &&
-                Ops[0].reg.value == ZYDIS_REGISTER_RCX &&
-                Ops[1].type == ZYDIS_OPERAND_TYPE_MEMORY &&
-                Ops[1].mem.base == ZYDIS_REGISTER_RIP )
+            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )Va, End - Va, &Instr, Ops ) ) )
             {
-                if ( ResolveMemOp( &Instr, &Ops[1], Va ) == FuncStart )
-                    FoundLea = true;
+                Va++; continue;
             }
-            else if ( FoundLea &&
-                Instr.mnemonic == ZYDIS_MNEMONIC_CALL &&
-                Ops[0].type == ZYDIS_OPERAND_TYPE_MEMORY &&
-                Ops[0].mem.base == ZYDIS_REGISTER_RIP )
+
+            if ( Instr.mnemonic == ZYDIS_MNEMONIC_CMP &&
+                 Ops[0].type == ZYDIS_OPERAND_TYPE_MEMORY &&
+                 Ops[0].mem.base == ZYDIS_REGISTER_RIP &&
+                 Ops[1].type == ZYDIS_OPERAND_TYPE_IMMEDIATE &&
+                 Ops[1].imm.value.s == 0 )
             {
-                if ( *( UINT64* )ResolveMemOp( &Instr, &Ops[0], Va ) == AddrKeKeepData )
-                    return true;
+                ++Score;
             }
 
             Va += Instr.length;
         }
 
-        return false;
+        return Score;
     }
 
-    // Find KiFilterFiberContext via its KdDisableDebugger/KeKeepData prologue...
+    // Scan one section for KiFilterFiberContext using a score-based approach.
+    // Finds all callers of KdDisableDebugger (direct E8 rel32 OR indirect FF15 IAT),
+    // then picks the one with the most CMP [RIP+x],0 instructions in its body.
+    // Updates BestScore and BestVa when a better candidate is found.
     //
-    static NTSTATUS ResolveKiFilterFiberContext( ZydisDecoder* Decoder, UINT64 TextStart, UINT64 TextEnd )
+    static void ScanKiFilterFiberContext(
+        ZydisDecoder* Decoder, UINT64 SecStart, UINT64 SecEnd,
+        UINT64 AddrKdDisableDebugger, int* BestScore, UINT64* BestVa )
     {
-        UINT64 AddrKdDisableDebugger = GetRoutine( L"KdDisableDebugger" );
-        UINT64 AddrKeKeepData = GetRoutine( L"KeKeepData" );
-
-        if ( !AddrKdDisableDebugger || !AddrKeKeepData )
-        {
-            LogError( "Offsets: KdDisableDebugger or KeKeepData not found" );
-            return STATUS_NOT_FOUND;
-        }
-
-        for ( UINT64 Va = TextStart; Va < TextEnd; )
+        for ( UINT64 Va = SecStart; Va < SecEnd; )
         {
             ZydisDecodedInstruction Instr;
             ZydisDecodedOperand Ops[ZYDIS_MAX_OPERAND_COUNT];
 
-            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )Va, TextEnd - Va, &Instr, Ops ) ) )
+            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )Va, SecEnd - Va, &Instr, Ops ) ) )
             {
                 Va++; continue;
             }
 
-            if ( Instr.mnemonic == ZYDIS_MNEMONIC_CALL &&
-                Ops[0].type == ZYDIS_OPERAND_TYPE_MEMORY &&
-                Ops[0].mem.base == ZYDIS_REGISTER_RIP )
+            if ( Instr.mnemonic == ZYDIS_MNEMONIC_CALL )
             {
-                UINT64 IatSlot = ResolveMemOp( &Instr, &Ops[0], Va );
-                if ( *( UINT64* )IatSlot == AddrKdDisableDebugger )
+                UINT64 CallTarget = 0;
+
+                if ( Ops[0].type == ZYDIS_OPERAND_TYPE_IMMEDIATE )
                 {
-                    if ( VerifyKiFilterFiberContextProlog( Va, Va + Instr.length, TextEnd, Decoder, AddrKeKeepData ) )
+                    // Direct CALL rel32 (E8) — ntoskrnl self-call
+                    ZydisCalcAbsoluteAddress( &Instr, &Ops[0], Va, &CallTarget );
+                }
+                else if ( Ops[0].type == ZYDIS_OPERAND_TYPE_MEMORY &&
+                          Ops[0].mem.base == ZYDIS_REGISTER_RIP )
+                {
+                    // Indirect CALL [RIP+x] (FF 15) — IAT import
+                    UINT64 Slot = 0;
+                    ZydisCalcAbsoluteAddress( &Instr, &Ops[0], Va, &Slot );
+                    CallTarget = *reinterpret_cast<UINT64*>( Slot );
+                }
+
+                if ( CallTarget == AddrKdDisableDebugger )
+                {
+                    UINT64 BodyStart = Va + Instr.length;
+                    UINT64 BodyEnd   = BodyStart + 0x500;
+                    if ( BodyEnd > SecEnd ) BodyEnd = SecEnd;
+
+                    int Score = CountCmpRipZero( Decoder, BodyStart, BodyEnd - BodyStart );
+                    if ( Score > *BestScore )
                     {
-                        KiFilterFiberContext = Va;
-                        Log( "Offsets: KiFilterFiberContext -> {}", Va );
-                        return STATUS_SUCCESS;
+                        *BestScore = Score;
+                        *BestVa    = Va;
                     }
                 }
             }
 
             Va += Instr.length;
         }
+    }
 
-        LogError( "Offsets: KiFilterFiberContext not found" );
+    static NTSTATUS ResolveKiFilterFiberContext(
+        ZydisDecoder* Decoder,
+        UINT64 TextStart, UINT64 TextEnd,
+        UINT64 PageStart, UINT64 PageEnd )
+    {
+        UINT64 AddrKdDisableDebugger = GetRoutine( L"KdDisableDebugger" );
+        if ( !AddrKdDisableDebugger )
+        {
+            LogError( "Offsets: KdDisableDebugger not found" );
+            return STATUS_NOT_FOUND;
+        }
+
+        int    BestScore = 0;
+        UINT64 BestVa    = 0;
+
+        ScanKiFilterFiberContext( Decoder, TextStart, TextEnd, AddrKdDisableDebugger, &BestScore, &BestVa );
+        if ( PageStart )
+            ScanKiFilterFiberContext( Decoder, PageStart, PageEnd, AddrKdDisableDebugger, &BestScore, &BestVa );
+
+        // KiFilterFiberContext contains the 3 CMP [RIP+x],0 checks extracted by
+        // ExtractGlobalsFromKiFilterFiberContext — require at least 2 as a sanity gate.
+        //
+        if ( BestScore >= 2 )
+        {
+            KiFilterFiberContext = BestVa;
+            Log( "Offsets: KiFilterFiberContext -> {} (score={})", BestVa, BestScore );
+            return STATUS_SUCCESS;
+        }
+
+        LogError( "Offsets: KiFilterFiberContext not found (best score={})", BestScore );
         return STATUS_NOT_FOUND;
     }
 
-    // Extract MaxDataSize, CallbackHealthFlag, PsIntegrityCheckEnabled from the
-    // first three CMP [RIP+x], 0 instructions inside KiFilterFiberContext...
-    //
     static NTSTATUS ExtractGlobalsFromKiFilterFiberContext( ZydisDecoder* Decoder )
     {
         UINT64 End = KiFilterFiberContext + 0x500;
@@ -193,16 +228,16 @@ namespace Offsets
         return STATUS_SUCCESS;
     }
 
-    static void CrossCheckMaxDataSize( ZydisDecoder* Decoder, UINT64 TextStart, UINT64 TextEnd )
+    static void CrossCheckMaxDataSize( ZydisDecoder* Decoder, UINT64 SecStart, UINT64 SecEnd )
     {
         ZydisDecodedInstruction Prev{};
 
-        for ( UINT64 Va = TextStart; Va < TextEnd; )
+        for ( UINT64 Va = SecStart; Va < SecEnd; )
         {
             ZydisDecodedInstruction Instr;
             ZydisDecodedOperand Ops[ZYDIS_MAX_OPERAND_COUNT];
 
-            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )Va, TextEnd - Va, &Instr, Ops ) ) )
+            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )Va, SecEnd - Va, &Instr, Ops ) ) )
             {
                 Va++; continue;
             }
@@ -235,10 +270,81 @@ namespace Offsets
         }
     }
 
-    // Locate the EX_TIMER offset inside the PG context block by finding the MOV [Rxx+disp], RAX
-    // that immediately follows the ExAllocateTimer call in the PG init path...
+    // Scan one section for ExAllocateTimer callers. Returns true on first match and
+    // sets Timer to the displacement of the MOV [Rx+disp],RAX that follows the call.
     //
-    static NTSTATUS ResolveTimerContextOffset( ZydisDecoder* Decoder, UINT64 TextStart, UINT64 TextEnd )
+    static bool ScanTimerContextOffset(
+        ZydisDecoder* Decoder, UINT64 SecStart, UINT64 SecEnd, UINT64 AddrExAllocateTimer )
+    {
+        for ( UINT64 Va = SecStart; Va < SecEnd; )
+        {
+            ZydisDecodedInstruction Instr;
+            ZydisDecodedOperand Ops[ZYDIS_MAX_OPERAND_COUNT];
+
+            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )Va, SecEnd - Va, &Instr, Ops ) ) )
+            {
+                Va++; continue;
+            }
+
+            if ( Instr.mnemonic == ZYDIS_MNEMONIC_CALL )
+            {
+                UINT64 CallTarget = 0;
+
+                if ( Ops[0].type == ZYDIS_OPERAND_TYPE_IMMEDIATE )
+                {
+                    ZydisCalcAbsoluteAddress( &Instr, &Ops[0], Va, &CallTarget );
+                }
+                else if ( Ops[0].type == ZYDIS_OPERAND_TYPE_MEMORY &&
+                          Ops[0].mem.base == ZYDIS_REGISTER_RIP )
+                {
+                    UINT64 Slot = 0;
+                    ZydisCalcAbsoluteAddress( &Instr, &Ops[0], Va, &Slot );
+                    CallTarget = *reinterpret_cast<UINT64*>( Slot );
+                }
+
+                if ( CallTarget == AddrExAllocateTimer )
+                {
+                    UINT64 Next  = Va + Instr.length;
+                    UINT64 Limit = Next + 48;
+                    if ( Limit > SecEnd ) Limit = SecEnd;
+
+                    while ( Next < Limit )
+                    {
+                        ZydisDecodedInstruction Store;
+                        ZydisDecodedOperand SOps[ZYDIS_MAX_OPERAND_COUNT];
+
+                        if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )Next, Limit - Next, &Store, SOps ) ) )
+                            break;
+
+                        // Require disp > 0x100 to target the PG context timer field
+                        // (small displacements like 0x8 are unrelated local struct stores).
+                        if ( Store.mnemonic == ZYDIS_MNEMONIC_MOV &&
+                            SOps[0].type == ZYDIS_OPERAND_TYPE_MEMORY &&
+                            SOps[0].mem.base != ZYDIS_REGISTER_RIP &&
+                            SOps[0].mem.disp.has_displacement &&
+                            SOps[0].mem.disp.value > 0x100 &&
+                            SOps[1].type == ZYDIS_OPERAND_TYPE_REGISTER &&
+                            SOps[1].reg.value == ZYDIS_REGISTER_RAX )
+                        {
+                            Timer = ( UINT64 )SOps[0].mem.disp.value;
+                            Log( "Offsets: TimerContextOffset -> {}", Timer );
+                            return true;
+                        }
+
+                        Next += Store.length;
+                    }
+                }
+            }
+
+            Va += Instr.length;
+        }
+        return false;
+    }
+
+    static NTSTATUS ResolveTimerContextOffset(
+        ZydisDecoder* Decoder,
+        UINT64 TextStart, UINT64 TextEnd,
+        UINT64 PageStart, UINT64 PageEnd )
     {
         UINT64 AddrExAllocateTimer = GetRoutine( L"ExAllocateTimer" );
         if ( !AddrExAllocateTimer )
@@ -247,69 +353,28 @@ namespace Offsets
             return STATUS_NOT_FOUND;
         }
 
-        for ( UINT64 Va = TextStart; Va < TextEnd; )
-        {
-            ZydisDecodedInstruction Instr;
-            ZydisDecodedOperand Ops[ZYDIS_MAX_OPERAND_COUNT];
+        if ( ScanTimerContextOffset( Decoder, TextStart, TextEnd, AddrExAllocateTimer ) )
+            return STATUS_SUCCESS;
 
-            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )Va, TextEnd - Va, &Instr, Ops ) ) )
-            {
-                Va++; continue;
-            }
-
-            if ( Instr.mnemonic == ZYDIS_MNEMONIC_CALL &&
-                Ops[0].type == ZYDIS_OPERAND_TYPE_MEMORY &&
-                Ops[0].mem.base == ZYDIS_REGISTER_RIP &&
-                *( UINT64* )ResolveMemOp( &Instr, &Ops[0], Va ) == AddrExAllocateTimer )
-            {
-                UINT64 Next = Va + Instr.length;
-                UINT64 Limit = Next + 48;
-                if ( Limit > TextEnd ) Limit = TextEnd;
-
-                while ( Next < Limit )
-                {
-                    ZydisDecodedInstruction Store;
-                    ZydisDecodedOperand SOps[ZYDIS_MAX_OPERAND_COUNT];
-
-                    if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )Next, Limit - Next, &Store, SOps ) ) )
-                        break;
-
-                    if ( Store.mnemonic == ZYDIS_MNEMONIC_MOV &&
-                        SOps[0].type == ZYDIS_OPERAND_TYPE_MEMORY &&
-                        SOps[0].mem.disp.has_displacement &&
-                        SOps[0].mem.disp.value > 0 &&
-                        SOps[1].type == ZYDIS_OPERAND_TYPE_REGISTER &&
-                        SOps[1].reg.value == ZYDIS_REGISTER_RAX )
-                    {
-                        Timer = ( UINT64 )SOps[0].mem.disp.value;
-                        Log( "Offsets: TimerContextOffset -> {}", Timer );
-                        return STATUS_SUCCESS;
-                    }
-
-                    Next += Store.length;
-                }
-            }
-
-            Va += Instr.length;
-        }
+        if ( PageStart && ScanTimerContextOffset( Decoder, PageStart, PageEnd, AddrExAllocateTimer ) )
+            return STATUS_SUCCESS;
 
         LogError( "Offsets: timer context offset not found" );
         return STATUS_NOT_FOUND;
     }
 
-    // Locate WmipSMBiosTablePhysicalAddress and WmipSMBiosTableLength by scanning
-    // for the unique sequence in WmipGetSMBiosTableData:
-    //   TEST RCX, RCX  /  JZ  /  MOV EDX, EAX  /  MOV R8D, 4
-    // then walking backwards to the two RIP-relative MOVs that precede it.
+    // Scan one section for the WmipGetSMBiosTableData anchor sequence and extract
+    // the two RIP-relative globals from the lookback window.
     //
-    static NTSTATUS ResolveSmbiosGlobals( ZydisDecoder* Decoder, UINT64 TextStart, UINT64 TextEnd )
+    static bool ScanSmbiosPattern(
+        ZydisDecoder* Decoder, UINT64 SecStart, UINT64 SecEnd )
     {
-        for ( UINT64 Va = TextStart; Va < TextEnd; )
+        for ( UINT64 Va = SecStart; Va < SecEnd; )
         {
             ZydisDecodedInstruction Instr;
             ZydisDecodedOperand Ops[ZYDIS_MAX_OPERAND_COUNT];
 
-            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )Va, TextEnd - Va, &Instr, Ops ) ) )
+            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )Va, SecEnd - Va, &Instr, Ops ) ) )
             {
                 Va++; continue;
             }
@@ -329,13 +394,13 @@ namespace Offsets
                                     O3[ZYDIS_MAX_OPERAND_COUNT],
                                     O4[ZYDIS_MAX_OPERAND_COUNT];
 
-            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )N, TextEnd - N, &I2, O2 ) ) ||
+            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )N, SecEnd - N, &I2, O2 ) ) ||
                  I2.mnemonic != ZYDIS_MNEMONIC_JZ )
             { Va += Instr.length; continue; }
 
             N += I2.length;
 
-            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )N, TextEnd - N, &I3, O3 ) ) ||
+            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )N, SecEnd - N, &I3, O3 ) ) ||
                  I3.mnemonic != ZYDIS_MNEMONIC_MOV ||
                  O3[0].type != ZYDIS_OPERAND_TYPE_REGISTER || O3[0].reg.value != ZYDIS_REGISTER_EDX ||
                  O3[1].type != ZYDIS_OPERAND_TYPE_REGISTER || O3[1].reg.value != ZYDIS_REGISTER_EAX )
@@ -343,17 +408,13 @@ namespace Offsets
 
             N += I3.length;
 
-            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )N, TextEnd - N, &I4, O4 ) ) ||
+            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )N, SecEnd - N, &I4, O4 ) ) ||
                  I4.mnemonic != ZYDIS_MNEMONIC_MOV ||
                  O4[0].type != ZYDIS_OPERAND_TYPE_REGISTER || O4[0].reg.value != ZYDIS_REGISTER_R8D ||
                  O4[1].type != ZYDIS_OPERAND_TYPE_IMMEDIATE || O4[1].imm.value.u != 4 )
             { Va += Instr.length; continue; }
 
-            // Found the anchor. Walk a lookback window to find the two RIP-relative
-            // MOVs that feed EAX (TableLength) and RCX (TablePhysicalAddress).
-            //
-            UINT64 Window = ( Va > TextStart + 80 ) ? Va - 80 : TextStart;
-
+            UINT64 Window = ( Va > SecStart + 80 ) ? Va - 80 : SecStart;
             UINT64 EaxGlobal = 0;
             UINT64 RcxGlobal = 0;
 
@@ -391,12 +452,118 @@ namespace Offsets
 
             WmipSMBiosTableLength           = ( UINT32* )EaxGlobal;
             WmipSMBiosTablePhysicalAddress  = ( UINT64* )RcxGlobal;
-
             Log( "Offsets: WmipSMBiosTableLength -> {}", EaxGlobal );
             Log( "Offsets: WmipSMBiosTablePhysicalAddress -> {}", RcxGlobal );
-
-            return STATUS_SUCCESS;
+            return true;
         }
+        return false;
+    }
+
+    // Alternative SMBIOS pattern for builds where the TEST RCX,RCX/JZ/MOV anchor
+    // does not appear: scan for adjacent RIP-relative stores where a 64-bit store
+    // (physical address) is within 32 bytes of a 32-bit store (length), preceded by
+    // a null-check branch on the 64-bit register. Reliable because no other pair of
+    // neighboring globals has this exact type signature in the SMBIOS init path.
+    //
+    static bool ScanSmbiosStorePairs( ZydisDecoder* Decoder, UINT64 SecStart, UINT64 SecEnd )
+    {
+        UINT64 LastStore64Va  = 0;
+        UINT64 LastStore64Gbl = 0;
+        ZydisRegister LastStore64Reg = ZYDIS_REGISTER_NONE;
+
+        for ( UINT64 Va = SecStart; Va < SecEnd; )
+        {
+            ZydisDecodedInstruction Instr;
+            ZydisDecodedOperand Ops[ZYDIS_MAX_OPERAND_COUNT];
+
+            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )Va, SecEnd - Va, &Instr, Ops ) ) )
+            {
+                Va++; continue;
+            }
+
+            // MOV [RIP+x], reg64
+            if ( Instr.mnemonic == ZYDIS_MNEMONIC_MOV &&
+                 Ops[0].type == ZYDIS_OPERAND_TYPE_MEMORY &&
+                 Ops[0].mem.base == ZYDIS_REGISTER_RIP &&
+                 Ops[1].type == ZYDIS_OPERAND_TYPE_REGISTER &&
+                 Ops[0].size == 64 )
+            {
+                LastStore64Va  = Va;
+                LastStore64Gbl = ResolveMemOp( &Instr, &Ops[0], Va );
+                LastStore64Reg = Ops[1].reg.value;
+            }
+
+            // MOV [RIP+y], reg32  within 32 bytes of a prior 64-bit store
+            else if ( Instr.mnemonic == ZYDIS_MNEMONIC_MOV &&
+                      Ops[0].type == ZYDIS_OPERAND_TYPE_MEMORY &&
+                      Ops[0].mem.base == ZYDIS_REGISTER_RIP &&
+                      Ops[1].type == ZYDIS_OPERAND_TYPE_REGISTER &&
+                      Ops[0].size == 32 &&
+                      LastStore64Va != 0 && Va - LastStore64Va <= 32 )
+            {
+                UINT64 LenGlobal = ResolveMemOp( &Instr, &Ops[0], Va );
+
+                // Verify that the 64-bit register was null-checked somewhere in the
+                // 120 bytes before the 64-bit store (TEST reg,reg or CMP reg,0).
+                bool FoundCheck = false;
+                UINT64 ChkStart = ( LastStore64Va > SecStart + 120 ) ? LastStore64Va - 120 : SecStart;
+                for ( UINT64 Cv = ChkStart; Cv < LastStore64Va && !FoundCheck; )
+                {
+                    ZydisDecodedInstruction Ci;
+                    ZydisDecodedOperand     Co[ZYDIS_MAX_OPERAND_COUNT];
+                    if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )Cv, LastStore64Va - Cv, &Ci, Co ) ) )
+                    { Cv++; continue; }
+
+                    if ( ( Ci.mnemonic == ZYDIS_MNEMONIC_TEST || Ci.mnemonic == ZYDIS_MNEMONIC_CMP ) &&
+                         Co[0].type == ZYDIS_OPERAND_TYPE_REGISTER &&
+                         Co[0].reg.value == LastStore64Reg )
+                        FoundCheck = true;
+
+                    Cv += Ci.length;
+                }
+
+                if ( FoundCheck )
+                {
+                    WmipSMBiosTablePhysicalAddress = ( UINT64* )LastStore64Gbl;
+                    WmipSMBiosTableLength          = ( UINT32* )LenGlobal;
+                    Log( "Offsets: WmipSMBiosTablePhysicalAddress (alt) -> {}", LastStore64Gbl );
+                    Log( "Offsets: WmipSMBiosTableLength (alt) -> {}", LenGlobal );
+                    return true;
+                }
+            }
+            else
+            {
+                // Reset tracker on any control-flow instruction so we only match
+                // stores within the same basic block.
+                if ( Instr.mnemonic == ZYDIS_MNEMONIC_CALL ||
+                     Instr.mnemonic == ZYDIS_MNEMONIC_RET  ||
+                     Instr.mnemonic == ZYDIS_MNEMONIC_JMP )
+                {
+                    LastStore64Va = 0;
+                }
+            }
+
+            Va += Instr.length;
+        }
+        return false;
+    }
+
+    static NTSTATUS ResolveSmbiosGlobals(
+        ZydisDecoder* Decoder,
+        UINT64 TextStart, UINT64 TextEnd,
+        UINT64 PageStart, UINT64 PageEnd )
+    {
+        if ( ScanSmbiosPattern( Decoder, TextStart, TextEnd ) )
+            return STATUS_SUCCESS;
+
+        if ( PageStart && ScanSmbiosPattern( Decoder, PageStart, PageEnd ) )
+            return STATUS_SUCCESS;
+
+        if ( ScanSmbiosStorePairs( Decoder, TextStart, TextEnd ) )
+            return STATUS_SUCCESS;
+
+        if ( PageStart && ScanSmbiosStorePairs( Decoder, PageStart, PageEnd ) )
+            return STATUS_SUCCESS;
 
         LogError( "Offsets: SMBIOS globals not found" );
         return STATUS_NOT_FOUND;
@@ -407,19 +574,19 @@ namespace Offsets
     // KeAcquireSpinLockRaiseToDpc call:
     //
     //   MOVZX r8d, al               ; save old IRQL in r8b
-    //   LEA   r9,  [RIP + rel32]    ; <-- address of ndisMiniportList
-    //   MOV   rdx, [r9]             ; dereference to head of list
-    //   TEST  rdx, rdx              ; check whether list is empty
+    //   LEA   any_reg, [RIP + rel32] ; <-- address of ndisMiniportList (any dest reg)
+    //   MOV   rdx, [same_reg]       ; dereference to head of list
+    //   TEST  rdx, rdx
     //
     static NTSTATUS ResolveNdisMiniportList(
-        ZydisDecoder* Decoder, UINT64 TextStart, UINT64 TextEnd )
+        ZydisDecoder* Decoder, UINT64 SecStart, UINT64 SecEnd )
     {
-        for ( UINT64 Va = TextStart; Va < TextEnd; )
+        for ( UINT64 Va = SecStart; Va < SecEnd; )
         {
             ZydisDecodedInstruction I1;
             ZydisDecodedOperand O1[ZYDIS_MAX_OPERAND_COUNT];
 
-            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)Va, TextEnd - Va, &I1, O1 ) ) )
+            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)Va, SecEnd - Va, &I1, O1 ) ) )
             {
                 Va++; continue;
             }
@@ -441,45 +608,78 @@ namespace Offsets
                                     O3[ZYDIS_MAX_OPERAND_COUNT],
                                     O4[ZYDIS_MAX_OPERAND_COUNT];
 
-            // LEA r9, [RIP + rel32]
-            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)N, TextEnd - N, &I2, O2 ) ) ||
+            // LEA any_reg64, [RIP + rel32]
+            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)N, SecEnd - N, &I2, O2 ) ) ||
                  I2.mnemonic != ZYDIS_MNEMONIC_LEA ||
                  O2[0].type != ZYDIS_OPERAND_TYPE_REGISTER ||
-                 O2[0].reg.value != ZYDIS_REGISTER_R9 ||
+                 O2[0].size != 64 ||
                  O2[1].type != ZYDIS_OPERAND_TYPE_MEMORY ||
                  O2[1].mem.base != ZYDIS_REGISTER_RIP )
             {
                 Va += I1.length; continue;
             }
 
+            auto LeaDestReg = O2[0].reg.value;
             N += I2.length;
 
-            // MOV rdx, [r9]
-            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)N, TextEnd - N, &I3, O3 ) ) ||
-                 I3.mnemonic != ZYDIS_MNEMONIC_MOV ||
-                 O3[0].type != ZYDIS_OPERAND_TYPE_REGISTER ||
-                 O3[0].reg.value != ZYDIS_REGISTER_RDX ||
-                 O3[1].type != ZYDIS_OPERAND_TYPE_MEMORY ||
-                 O3[1].mem.base != ZYDIS_REGISTER_R9 )
+            // Strategy 1 (26100/28000): MOV rdx, [lea_dest_reg] / TEST rdx, rdx
+            bool S1 = false;
+            if ( ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)N, SecEnd - N, &I3, O3 ) ) &&
+                 I3.mnemonic == ZYDIS_MNEMONIC_MOV &&
+                 O3[0].type == ZYDIS_OPERAND_TYPE_REGISTER &&
+                 O3[0].reg.value == ZYDIS_REGISTER_RDX &&
+                 O3[1].type == ZYDIS_OPERAND_TYPE_MEMORY &&
+                 O3[1].mem.base == LeaDestReg )
             {
-                Va += I1.length; continue;
+                UINT64 N4 = N + I3.length;
+                if ( ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)N4, SecEnd - N4, &I4, O4 ) ) &&
+                     I4.mnemonic == ZYDIS_MNEMONIC_TEST &&
+                     O4[0].type == ZYDIS_OPERAND_TYPE_REGISTER &&
+                     O4[0].reg.value == ZYDIS_REGISTER_RDX &&
+                     O4[1].type == ZYDIS_OPERAND_TYPE_REGISTER &&
+                     O4[1].reg.value == ZYDIS_REGISTER_RDX )
+                {
+                    S1 = true;
+                }
             }
 
-            N += I3.length;
+            // Strategy 2 (22000/22621/tiny11): within the next 5 instructions after the
+            // LEA, find any CMP or TEST that references the LEA destination register.
+            // This matches the empty-list check: CMP [head_ptr], lea_reg or TEST lea_reg.
+            //
+            bool S2 = false;
+            if ( !S1 )
+            {
+                UINT64 Scan = N;
+                for ( int Step = 0; Step < 5 && Scan < SecEnd && !S2; ++Step )
+                {
+                    ZydisDecodedInstruction Sx;
+                    ZydisDecodedOperand Ox[ZYDIS_MAX_OPERAND_COUNT];
+                    if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)Scan, SecEnd - Scan, &Sx, Ox ) ) )
+                        break;
 
-            // TEST rdx, rdx
-            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)N, TextEnd - N, &I4, O4 ) ) ||
-                 I4.mnemonic != ZYDIS_MNEMONIC_TEST ||
-                 O4[0].type != ZYDIS_OPERAND_TYPE_REGISTER ||
-                 O4[0].reg.value != ZYDIS_REGISTER_RDX ||
-                 O4[1].type != ZYDIS_OPERAND_TYPE_REGISTER ||
-                 O4[1].reg.value != ZYDIS_REGISTER_RDX )
+                    if ( Sx.mnemonic == ZYDIS_MNEMONIC_CMP || Sx.mnemonic == ZYDIS_MNEMONIC_TEST )
+                    {
+                        for ( ULONG oi = 0; oi < Sx.operand_count; ++oi )
+                        {
+                            if ( Ox[oi].type == ZYDIS_OPERAND_TYPE_REGISTER &&
+                                 Ox[oi].reg.value == LeaDestReg )
+                            {
+                                S2 = true; break;
+                            }
+                        }
+                    }
+                    Scan += Sx.length;
+                }
+            }
+
+            if ( !S1 && !S2 )
             {
                 Va += I1.length; continue;
             }
 
             ZydisCalcAbsoluteAddress( &I2, &O2[1], Va + I1.length, &NdisMiniportList );
-            Log( "Offsets: NdisMiniportList -> {}", NdisMiniportList );
+            Log( "Offsets: NdisMiniportList -> {} ({})", NdisMiniportList, S1 ? "S1" : "S2" );
             return STATUS_SUCCESS;
         }
 
@@ -487,45 +687,35 @@ namespace Offsets
         return STATUS_NOT_FOUND;
     }
 
-    // Resolve NDIS_MINIPORT_BLOCK::NextGlobalMiniport offset by finding the
-    // self-referential loop: MOV reg, [same_reg + disp] / TEST reg, reg / JNZ-back
-    // that walks the global miniport list.
-    //
-    // Also resolves NDIS_IF_BLOCK field offsets from ndisIfUpdateCurrentMacAddress,
-    // identified by the distinctive prologue pattern:
-    //
-    //   MOVZX esi, word ptr [rdi]   ; read incoming MAC length from IF_PHYS_ADDR
-    //   MOVZX ebp, al               ; save IRQL
-    //   CMP   [rbx + disp], si      ; compare with stored current MAC length
-    //
     static NTSTATUS ResolveNdisStructOffsets(
-        ZydisDecoder* Decoder, UINT64 TextStart, UINT64 TextEnd )
+        ZydisDecoder* Decoder, UINT64 SecStart, UINT64 SecEnd )
     {
         // Find the self-referential MOV to extract NdisMpNextOffset.
+        // Broadened displacement range to cover all known builds (0 to 0x2000).
         //
         bool FoundNext = false;
-        for ( UINT64 Va = TextStart; Va < TextEnd && !FoundNext; )
+        for ( UINT64 Va = SecStart; Va < SecEnd && !FoundNext; )
         {
             ZydisDecodedInstruction I1;
             ZydisDecodedOperand O1[ZYDIS_MAX_OPERAND_COUNT];
 
-            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)Va, TextEnd - Va, &I1, O1 ) ) )
+            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)Va, SecEnd - Va, &I1, O1 ) ) )
             {
                 Va++; continue;
             }
 
-            // MOV reg64, [same_reg64 + disp32]  in the range 0xE00-0x1100
+            // MOV reg64, [same_reg64 + disp]  in range 0x8 – 0x2000
             if ( I1.mnemonic == ZYDIS_MNEMONIC_MOV &&
                  O1[0].type == ZYDIS_OPERAND_TYPE_REGISTER &&
                  O1[1].type == ZYDIS_OPERAND_TYPE_MEMORY &&
                  O1[1].mem.base == O1[0].reg.value &&
                  O1[1].mem.disp.has_displacement &&
-                 O1[1].mem.disp.value >= 0xE00 &&
-                 O1[1].mem.disp.value <= 0x1100 &&
+                 O1[1].mem.disp.value >= 0x8 &&
+                 O1[1].mem.disp.value <= 0x2000 &&
                  O1[0].size == 64 )
             {
                 UINT64 N = Va + I1.length;
-                auto   Reg = O1[0].reg.value;
+                auto   Reg  = O1[0].reg.value;
                 UINT64 Disp = (UINT64)O1[1].mem.disp.value;
 
                 ZydisDecodedInstruction I2, I3;
@@ -533,7 +723,7 @@ namespace Offsets
                                         O3[ZYDIS_MAX_OPERAND_COUNT];
 
                 // TEST same_reg, same_reg
-                if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)N, TextEnd - N, &I2, O2 ) ) ||
+                if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)N, SecEnd - N, &I2, O2 ) ) ||
                      I2.mnemonic != ZYDIS_MNEMONIC_TEST ||
                      O2[0].type != ZYDIS_OPERAND_TYPE_REGISTER ||
                      O2[0].reg.value != Reg ||
@@ -545,8 +735,8 @@ namespace Offsets
 
                 N += I2.length;
 
-                // JNZ (backward branch back into the loop)
-                if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)N, TextEnd - N, &I3, O3 ) ) ||
+                // JNZ backward into the loop
+                if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)N, SecEnd - N, &I3, O3 ) ) ||
                      I3.mnemonic != ZYDIS_MNEMONIC_JNZ )
                 {
                     Va += I1.length; continue;
@@ -579,20 +769,15 @@ namespace Offsets
         //   MOVZX esi, word ptr [rdi]   ; 0F B7 37
         //   MOVZX ebp, al               ; 0F B6 E8
         //
-        // Then extract: CMP [rbx+disp], si -> disp = NdisIfCurrentMacLen
-        //               LEA rcx, [rbx+disp+2]   -> NdisIfCurrentMac
-        //
-        // We also expect a second CMP/LEA pair for the permanent MAC further down.
-        //
         bool FoundCurrentMac   = false;
         bool FoundPermanentMac = false;
 
-        for ( UINT64 Va = TextStart; Va < TextEnd && !( FoundCurrentMac && FoundPermanentMac ); )
+        for ( UINT64 Va = SecStart; Va < SecEnd && !( FoundCurrentMac && FoundPermanentMac ); )
         {
             ZydisDecodedInstruction I1;
             ZydisDecodedOperand O1[ZYDIS_MAX_OPERAND_COUNT];
 
-            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)Va, TextEnd - Va, &I1, O1 ) ) )
+            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)Va, SecEnd - Va, &I1, O1 ) ) )
             {
                 Va++; continue;
             }
@@ -614,7 +799,7 @@ namespace Offsets
             ZydisDecodedOperand O2[ZYDIS_MAX_OPERAND_COUNT];
 
             // MOVZX ebp, al
-            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)N, TextEnd - N, &I2, O2 ) ) ||
+            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)N, SecEnd - N, &I2, O2 ) ) ||
                  I2.mnemonic != ZYDIS_MNEMONIC_MOVZX ||
                  O2[0].type  != ZYDIS_OPERAND_TYPE_REGISTER ||
                  O2[0].reg.value != ZYDIS_REGISTER_EBP ||
@@ -624,10 +809,11 @@ namespace Offsets
                 Va += I1.length; continue;
             }
 
-            // Scan forward up to 12 bytes to find CMP [rbx+disp], si
+            // Scan up to 0x200 bytes forward from this prologue for CMP [reg+disp], SI16
+            // where 0x300 < disp < 0x900 (covers 0x464 on 26100/28000 and 0x6ba on 22000/22621).
             //
-            UINT64 Limit = N + I2.length + 12;
-            if ( Limit > TextEnd ) Limit = TextEnd;
+            UINT64 Limit = N + I2.length + 0x200;
+            if ( Limit > SecEnd ) Limit = SecEnd;
             UINT64 Scan = N + I2.length;
 
             while ( Scan < Limit )
@@ -640,12 +826,12 @@ namespace Offsets
 
                 if ( Ix.mnemonic == ZYDIS_MNEMONIC_CMP &&
                      Ox[0].type  == ZYDIS_OPERAND_TYPE_MEMORY &&
-                     Ox[0].mem.base == ZYDIS_REGISTER_RBX &&
+                     Ox[0].mem.base != ZYDIS_REGISTER_RIP &&
                      Ox[0].mem.disp.has_displacement &&
-                     Ox[0].mem.disp.value > 0x400 &&
-                     Ox[0].mem.disp.value < 0x520 &&
+                     Ox[0].mem.disp.value > 0x300 &&
+                     Ox[0].mem.disp.value < 0x900 &&
                      Ox[1].type  == ZYDIS_OPERAND_TYPE_REGISTER &&
-                     Ox[1].reg.value == ZYDIS_REGISTER_SI )
+                     Ox[1].size  == 16 )
                 {
                     UINT64 Disp = (UINT64)Ox[0].mem.disp.value;
 
@@ -657,7 +843,7 @@ namespace Offsets
                         Log( "Offsets: NdisIfCurrentMac -> {}", Disp + 2 );
                         FoundCurrentMac = true;
                     }
-                    else if ( !FoundPermanentMac )
+                    else if ( !FoundPermanentMac && Disp != NdisIfCurrentMacLen )
                     {
                         NdisIfPermMacLen = static_cast< UINT32 >( Disp );
                         NdisIfPermMac    = static_cast< UINT32 >( Disp + 2 );
@@ -666,7 +852,8 @@ namespace Offsets
                         FoundPermanentMac = true;
                     }
 
-                    break;
+                    if ( FoundCurrentMac && FoundPermanentMac )
+                        break;
                 }
 
                 Scan += Ix.length;
@@ -682,17 +869,15 @@ namespace Offsets
             return STATUS_NOT_FOUND;
         }
 
-        // Derive NdisMpIfBlockOffset from the relationship: just before accessing
-        // the current MAC offset we saw, a MOV loads the IF_BLOCK pointer from the
-        // miniport block.  Find that: MOV reg64, [rcx + disp32] immediately followed
-        // (within 10 bytes) by an access to [reg64 + NdisIfCurrentMacLen].
+        // Derive NdisMpIfBlockOffset: find MOV reg64, [rcx + disp] (broadened range)
+        // followed within 10 bytes by access to [same_reg + NdisIfCurrentMacLen].
         //
-        for ( UINT64 Va = TextStart; Va < TextEnd; )
+        for ( UINT64 Va = SecStart; Va < SecEnd; )
         {
             ZydisDecodedInstruction I1;
             ZydisDecodedOperand O1[ZYDIS_MAX_OPERAND_COUNT];
 
-            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)Va, TextEnd - Va, &I1, O1 ) ) )
+            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)Va, SecEnd - Va, &I1, O1 ) ) )
             {
                 Va++; continue;
             }
@@ -703,14 +888,14 @@ namespace Offsets
                  O1[1].type  == ZYDIS_OPERAND_TYPE_MEMORY &&
                  O1[1].mem.base == ZYDIS_REGISTER_RCX &&
                  O1[1].mem.disp.has_displacement &&
-                 O1[1].mem.disp.value > 0xE00 &&
-                 O1[1].mem.disp.value < 0x1100 )
+                 O1[1].mem.disp.value > 0 &&
+                 O1[1].mem.disp.value < 0x2000 )
             {
                 auto   IfReg = O1[0].reg.value;
                 UINT64 Disp  = (UINT64)O1[1].mem.disp.value;
                 UINT64 N     = Va + I1.length;
                 UINT64 Limit = N + 10;
-                if ( Limit > TextEnd ) Limit = TextEnd;
+                if ( Limit > SecEnd ) Limit = SecEnd;
 
                 while ( N < Limit )
                 {
@@ -739,6 +924,243 @@ namespace Offsets
         }
 
         LogError( "Offsets: NdisMpIfBlockOffset pattern not found" );
+        return STATUS_NOT_FOUND;
+    }
+
+    // Resolve MmUnloadedDrivers and MmLastUnloadedDriver by scanning for the
+    // characteristic list-walk in MmLocateUnloadedDriver:
+    //
+    //   MOV EAX, [RIP+MmLastUnloadedDriver]   ; load ULONG index
+    //   ...
+    //   IMUL r64, r64/rax, 0x28 (or 0x2C)    ; stride = sizeof(MM_UNLOADED_DRIVER)
+    //   ...
+    //   LEA/ADD rcx, [RIP+MmUnloadedDrivers]   ; base of array
+    //
+    static NTSTATUS ResolveMmUnloadedDrivers( ZydisDecoder* Decoder, UINT64 SecStart, UINT64 SecEnd )
+    {
+        // Try direct export first (available pre-Win10).
+        UINT64 Exp = GetRoutine( L"MmUnloadedDrivers" );
+        if ( Exp )
+        {
+            MmUnloadedDrivers = reinterpret_cast< PVOID* >( Exp );
+            Log( "Offsets: MmUnloadedDrivers (export) -> {}", Exp );
+
+            UINT64 ExpLast = GetRoutine( L"MmLastUnloadedDriver" );
+            if ( ExpLast )
+            {
+                MmLastUnloadedDriver = reinterpret_cast< ULONG* >( ExpLast );
+                Log( "Offsets: MmLastUnloadedDriver (export) -> {}", ExpLast );
+                return STATUS_SUCCESS;
+            }
+        }
+
+        // Pattern scan: find IMUL r64, r64, 0x28 (MM_UNLOADED_DRIVER stride)
+        // with a preceding RIP-relative ULONG load (MmLastUnloadedDriver) and
+        // a following RIP-relative pointer load/LEA (MmUnloadedDrivers).
+        //
+        for ( UINT64 Va = SecStart; Va < SecEnd; )
+        {
+            ZydisDecodedInstruction Instr;
+            ZydisDecodedOperand Ops[ZYDIS_MAX_OPERAND_COUNT];
+
+            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )Va, SecEnd - Va, &Instr, Ops ) ) )
+            {
+                Va++; continue;
+            }
+
+            // IMUL reg64, reg64, imm  where imm is 0x28 or 0x2C
+            if ( Instr.mnemonic == ZYDIS_MNEMONIC_IMUL &&
+                 Ops[0].type == ZYDIS_OPERAND_TYPE_REGISTER &&
+                 Ops[0].size == 64 &&
+                 Ops[2].type == ZYDIS_OPERAND_TYPE_IMMEDIATE &&
+                 ( Ops[2].imm.value.u == 0x28 || Ops[2].imm.value.u == 0x2C ) )
+            {
+                // Scan backward up to 64 bytes for MOV r32, [RIP+x] (the last-driver index)
+                UINT64 WinStart = ( Va > SecStart + 64 ) ? Va - 64 : SecStart;
+                UINT64 LastDrvGlobal = 0;
+
+                for ( UINT64 V2 = WinStart; V2 < Va; )
+                {
+                    ZydisDecodedInstruction Bk;
+                    ZydisDecodedOperand     Bo[ZYDIS_MAX_OPERAND_COUNT];
+                    if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )V2, Va - V2, &Bk, Bo ) ) )
+                    { V2++; continue; }
+
+                    if ( Bk.mnemonic == ZYDIS_MNEMONIC_MOV &&
+                         Bo[0].type == ZYDIS_OPERAND_TYPE_REGISTER &&
+                         ( Bo[0].size == 32 || Bo[0].size == 64 ) &&
+                         Bo[1].type == ZYDIS_OPERAND_TYPE_MEMORY &&
+                         Bo[1].mem.base == ZYDIS_REGISTER_RIP )
+                    {
+                        ZydisCalcAbsoluteAddress( &Bk, &Bo[1], V2, &LastDrvGlobal );
+                    }
+                    V2 += Bk.length;
+                }
+
+                if ( !LastDrvGlobal )
+                { Va += Instr.length; continue; }
+
+                // Scan forward up to 48 bytes for LEA reg, [RIP+x] (the array base)
+                UINT64 WinEnd   = Va + Instr.length;
+                UINT64 ArrGlobal = 0;
+                UINT64 FwdLimit = WinEnd + 48;
+                if ( FwdLimit > SecEnd ) FwdLimit = SecEnd;
+
+                for ( UINT64 V3 = WinEnd; V3 < FwdLimit; )
+                {
+                    ZydisDecodedInstruction Fw;
+                    ZydisDecodedOperand     Fo[ZYDIS_MAX_OPERAND_COUNT];
+                    if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )V3, FwdLimit - V3, &Fw, Fo ) ) )
+                    { V3++; continue; }
+
+                    if ( ( Fw.mnemonic == ZYDIS_MNEMONIC_LEA || Fw.mnemonic == ZYDIS_MNEMONIC_MOV ) &&
+                         Fo[0].type == ZYDIS_OPERAND_TYPE_REGISTER &&
+                         Fo[0].size == 64 &&
+                         Fo[1].type == ZYDIS_OPERAND_TYPE_MEMORY &&
+                         Fo[1].mem.base == ZYDIS_REGISTER_RIP )
+                    {
+                        ZydisCalcAbsoluteAddress( &Fw, &Fo[1], V3, &ArrGlobal );
+                        break;
+                    }
+                    V3 += Fw.length;
+                }
+
+                if ( !ArrGlobal )
+                { Va += Instr.length; continue; }
+
+                MmUnloadedDrivers    = reinterpret_cast< PVOID* >( ArrGlobal );
+                MmLastUnloadedDriver = reinterpret_cast< ULONG* >( LastDrvGlobal );
+                Log( "Offsets: MmUnloadedDrivers -> {}", ArrGlobal );
+                Log( "Offsets: MmLastUnloadedDriver -> {}", LastDrvGlobal );
+                return STATUS_SUCCESS;
+            }
+
+            Va += Instr.length;
+        }
+
+        LogError( "Offsets: MmUnloadedDrivers not found" );
+        return STATUS_NOT_FOUND;
+    }
+
+    // Resolve PiDDBCacheTable and PiDDBLock by finding call sites to
+    // RtlLookupElementGenericTableAvl (exported) and extracting the LEA RCX,[RIP+x]
+    // argument that immediately precedes the call (= PiDDBCacheTable).
+    // PiDDBLock is found via ExAcquireResourceExclusiveLite calls near PiDDBCacheTable usage.
+    //
+    static NTSTATUS ResolvePiDDB( ZydisDecoder* Decoder, UINT64 SecStart, UINT64 SecEnd )
+    {
+        UINT64 AddrLookup = GetRoutine( L"RtlLookupElementGenericTableAvl" );
+        if ( !AddrLookup )
+        {
+            LogWarn( "Offsets: RtlLookupElementGenericTableAvl not exported, skipping PiDDB" );
+            return STATUS_NOT_FOUND;
+        }
+
+        UINT64 AddrAcquire = GetRoutine( L"ExAcquireResourceExclusiveLite" );
+
+        for ( UINT64 Va = SecStart; Va < SecEnd; )
+        {
+            ZydisDecodedInstruction Instr;
+            ZydisDecodedOperand Ops[ZYDIS_MAX_OPERAND_COUNT];
+
+            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )Va, SecEnd - Va, &Instr, Ops ) ) )
+            {
+                Va++; continue;
+            }
+
+            // Find CALL [RIP+x] where the IAT slot holds AddrLookup
+            if ( Instr.mnemonic == ZYDIS_MNEMONIC_CALL &&
+                 Ops[0].type == ZYDIS_OPERAND_TYPE_MEMORY &&
+                 Ops[0].mem.base == ZYDIS_REGISTER_RIP )
+            {
+                UINT64 Slot = ResolveMemOp( &Instr, &Ops[0], Va );
+                if ( *( UINT64* )Slot != AddrLookup )
+                {
+                    Va += Instr.length; continue;
+                }
+
+                // Walk backward up to 24 bytes for LEA RCX, [RIP+PiDDBCacheTable]
+                UINT64 WinStart = ( Va > SecStart + 24 ) ? Va - 24 : SecStart;
+                UINT64 TableGlobal = 0;
+
+                for ( UINT64 V2 = WinStart; V2 < Va; )
+                {
+                    ZydisDecodedInstruction Bk;
+                    ZydisDecodedOperand     Bo[ZYDIS_MAX_OPERAND_COUNT];
+                    if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )V2, Va - V2, &Bk, Bo ) ) )
+                    { V2++; continue; }
+
+                    if ( Bk.mnemonic == ZYDIS_MNEMONIC_LEA &&
+                         Bo[0].type == ZYDIS_OPERAND_TYPE_REGISTER &&
+                         Bo[0].reg.value == ZYDIS_REGISTER_RCX &&
+                         Bo[1].type == ZYDIS_OPERAND_TYPE_MEMORY &&
+                         Bo[1].mem.base == ZYDIS_REGISTER_RIP )
+                    {
+                        ZydisCalcAbsoluteAddress( &Bk, &Bo[1], V2, &TableGlobal );
+                    }
+                    V2 += Bk.length;
+                }
+
+                if ( !TableGlobal )
+                { Va += Instr.length; continue; }
+
+                PiDDBCacheTable = reinterpret_cast< PVOID >( TableGlobal );
+                Log( "Offsets: PiDDBCacheTable -> {}", TableGlobal );
+
+                // Find PiDDBLock: scan backward up to 200 bytes for
+                // CALL [ExAcquireResourceExclusiveLite] with LEA RCX, [RIP+x] before it.
+                if ( AddrAcquire )
+                {
+                    UINT64 LockWinStart = ( Va > SecStart + 200 ) ? Va - 200 : SecStart;
+
+                    for ( UINT64 V3 = LockWinStart; V3 < Va; )
+                    {
+                        ZydisDecodedInstruction Ac;
+                        ZydisDecodedOperand     Ao[ZYDIS_MAX_OPERAND_COUNT];
+                        if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )V3, Va - V3, &Ac, Ao ) ) )
+                        { V3++; continue; }
+
+                        if ( Ac.mnemonic == ZYDIS_MNEMONIC_CALL &&
+                             Ao[0].type == ZYDIS_OPERAND_TYPE_MEMORY &&
+                             Ao[0].mem.base == ZYDIS_REGISTER_RIP &&
+                             *( UINT64* )ResolveMemOp( &Ac, &Ao[0], V3 ) == AddrAcquire )
+                        {
+                            UINT64 LockWin2 = ( V3 > SecStart + 16 ) ? V3 - 16 : SecStart;
+                            for ( UINT64 V4 = LockWin2; V4 < V3; )
+                            {
+                                ZydisDecodedInstruction Lk;
+                                ZydisDecodedOperand     Lo[ZYDIS_MAX_OPERAND_COUNT];
+                                if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, ( void* )V4, V3 - V4, &Lk, Lo ) ) )
+                                { V4++; continue; }
+
+                                if ( Lk.mnemonic == ZYDIS_MNEMONIC_LEA &&
+                                     Lo[0].type == ZYDIS_OPERAND_TYPE_REGISTER &&
+                                     Lo[0].reg.value == ZYDIS_REGISTER_RCX &&
+                                     Lo[1].type == ZYDIS_OPERAND_TYPE_MEMORY &&
+                                     Lo[1].mem.base == ZYDIS_REGISTER_RIP )
+                                {
+                                    UINT64 LockGlobal = 0;
+                                    ZydisCalcAbsoluteAddress( &Lk, &Lo[1], V4, &LockGlobal );
+                                    if ( LockGlobal != TableGlobal )
+                                    {
+                                        PiDDBLock = reinterpret_cast< PVOID >( LockGlobal );
+                                        Log( "Offsets: PiDDBLock -> {}", LockGlobal );
+                                    }
+                                }
+                                V4 += Lk.length;
+                            }
+                        }
+                        V3 += Ac.length;
+                    }
+                }
+
+                return STATUS_SUCCESS;
+            }
+
+            Va += Instr.length;
+        }
+
+        LogError( "Offsets: PiDDBCacheTable not found" );
         return STATUS_NOT_FOUND;
     }
 
@@ -780,7 +1202,6 @@ namespace Offsets
                 INT64 Disp = Ops[1].mem.disp.value;
                 if ( Disp >= 0x200 && Disp <= 0x1000 )
                 {
-                    // Verify followed by AND/TEST on AL or EAX within 5 instructions.
                     UINT64 N = Va + Instr.length;
                     for ( int Step = 0; Step < 5 && N < Fn + ScanLimit; ++Step )
                     {
@@ -816,8 +1237,6 @@ namespace Offsets
     }
 
     // Find _OBJECT_TYPE.CallbackList offset by scanning ObRegisterCallbacks.
-    // Pattern: LEA R??, [R?? + disp] where disp in [0x100, 0x280] applied to a
-    // pointer that was loaded from an ObjectType argument.
     // Fallback: 0x158 (stable Win10 1903 – Win11 24H2).
     //
     static void ResolveObjTypeCallbackListOffset( ZydisDecoder* Decoder )
@@ -870,271 +1289,6 @@ namespace Offsets
         Log( "Offsets: ObjTypeCallbackListOffset -> 0x158 (fallback)" );
     }
 
-    // Locate MmUnloadedDrivers (PVOID* to the circular array) and MmLastUnloadedDriver
-    // (ULONG* write index) by anchoring on MOV r8d, 54446D4Dh ('MMdT' pool tag) inside
-    // MiTrackUnloadedDrivers.  The array pointer load (TEST reg,reg pattern) precedes the
-    // anchor; the index load (CMP reg32, 32h) follows it.
-    //
-    static NTSTATUS ResolveMmUnloadedDrivers( ZydisDecoder* Decoder, UINT64 TextStart, UINT64 TextEnd )
-    {
-        for ( UINT64 Va = TextStart; Va < TextEnd; )
-        {
-            ZydisDecodedInstruction Instr;
-            ZydisDecodedOperand     Ops[ZYDIS_MAX_OPERAND_COUNT];
-
-            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)Va, TextEnd - Va, &Instr, Ops ) ) )
-            { Va++; continue; }
-
-            // Anchor: MOV r8d, 54446D4Dh
-            if ( !( Instr.mnemonic == ZYDIS_MNEMONIC_MOV &&
-                    Ops[0].type    == ZYDIS_OPERAND_TYPE_REGISTER &&
-                    Ops[0].reg.value == ZYDIS_REGISTER_R8D &&
-                    Ops[1].type    == ZYDIS_OPERAND_TYPE_IMMEDIATE &&
-                    Ops[1].imm.value.u == 0x54446D4DUL ) )
-            { Va += Instr.length; continue; }
-
-            // --- backward window: find MOV reg64, [RIP+rel] followed by TEST reg64, reg64 ---
-            UINT64 WinStart = ( Va > TextStart + 0x100 ) ? Va - 0x100 : TextStart;
-
-            // Collect instruction addresses in the window (forward pass).
-            UINT64 InsVa[64]{};
-            UCHAR  InsLen[64]{};
-            ULONG  InsCount = 0;
-
-            for ( UINT64 V2 = WinStart; V2 < Va && InsCount < 64; )
-            {
-                ZydisDecodedInstruction Ix;
-                ZydisDecodedOperand     Ox[ZYDIS_MAX_OPERAND_COUNT];
-                if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)V2, Va - V2, &Ix, Ox ) ) )
-                { V2++; continue; }
-                InsVa[InsCount]  = V2;
-                InsLen[InsCount] = static_cast<UCHAR>( Ix.length );
-                ++InsCount;
-                V2 += Ix.length;
-            }
-
-            // Walk collected instructions looking for last MOV reg64,[RIP+rel] + TEST reg64,reg64.
-            UINT64 UnloadedArray = 0;
-            for ( int K = 0; K + 1 < (int)InsCount && !UnloadedArray; ++K )
-            {
-                ZydisDecodedInstruction Ia, Ib;
-                ZydisDecodedOperand     Oa[ZYDIS_MAX_OPERAND_COUNT],
-                                        Ob[ZYDIS_MAX_OPERAND_COUNT];
-
-                if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)InsVa[K],   32, &Ia, Oa ) ) ) continue;
-                if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)InsVa[K+1], 32, &Ib, Ob ) ) ) continue;
-
-                if ( Ia.mnemonic == ZYDIS_MNEMONIC_MOV &&
-                     Oa[0].type  == ZYDIS_OPERAND_TYPE_REGISTER &&
-                     Oa[0].size  == 64 &&
-                     Oa[1].type  == ZYDIS_OPERAND_TYPE_MEMORY &&
-                     Oa[1].mem.base == ZYDIS_REGISTER_RIP &&
-                     Ib.mnemonic == ZYDIS_MNEMONIC_TEST &&
-                     Ob[0].type  == ZYDIS_OPERAND_TYPE_REGISTER &&
-                     Ob[0].reg.value == Oa[0].reg.value )
-                {
-                    // This pair could be the one; keep updating so we pick the last one.
-                    ZydisCalcAbsoluteAddress( &Ia, &Oa[1], InsVa[K], &UnloadedArray );
-                }
-            }
-
-            if ( !UnloadedArray )
-            { Va += Instr.length; continue; }
-
-            // --- forward window: find MOV reg32,[RIP+rel] + CMP reg32, 32h ---
-            UINT64 FwdEnd = min( Va + 0x80, TextEnd );
-            UINT64 LastIdx = 0;
-
-            for ( UINT64 V2 = Va + Instr.length; V2 < FwdEnd; )
-            {
-                ZydisDecodedInstruction Ia, Ib;
-                ZydisDecodedOperand     Oa[ZYDIS_MAX_OPERAND_COUNT],
-                                        Ob[ZYDIS_MAX_OPERAND_COUNT];
-
-                if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)V2, FwdEnd - V2, &Ia, Oa ) ) )
-                { V2++; continue; }
-
-                UINT64 Nb = V2 + Ia.length;
-                if ( Nb >= FwdEnd ) break;
-
-                if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)Nb, FwdEnd - Nb, &Ib, Ob ) ) )
-                { V2 += Ia.length; continue; }
-
-                if ( Ia.mnemonic == ZYDIS_MNEMONIC_MOV &&
-                     Oa[0].type  == ZYDIS_OPERAND_TYPE_REGISTER &&
-                     Oa[0].size  == 32 &&
-                     Oa[1].type  == ZYDIS_OPERAND_TYPE_MEMORY &&
-                     Oa[1].mem.base == ZYDIS_REGISTER_RIP &&
-                     Ib.mnemonic == ZYDIS_MNEMONIC_CMP &&
-                     Ob[1].type  == ZYDIS_OPERAND_TYPE_IMMEDIATE &&
-                     Ob[1].imm.value.u == 0x32 )
-                {
-                    ZydisCalcAbsoluteAddress( &Ia, &Oa[1], V2, &LastIdx );
-                    break;
-                }
-
-                V2 += Ia.length;
-            }
-
-            if ( !LastIdx )
-            { Va += Instr.length; continue; }
-
-            MmUnloadedDrivers    = reinterpret_cast<PVOID*>( UnloadedArray );
-            MmLastUnloadedDriver = reinterpret_cast<ULONG*>( LastIdx );
-
-            Log( "Offsets: MmUnloadedDrivers -> {}", UnloadedArray );
-            Log( "Offsets: MmLastUnloadedDriver -> {}", LastIdx );
-            return STATUS_SUCCESS;
-        }
-
-        LogError( "Offsets: MmUnloadedDrivers pattern not found" );
-        return STATUS_NOT_FOUND;
-    }
-
-    // Locate PiDDBCacheTable (RTL_AVL_TABLE*) and PiDDBLock (ERESOURCE*) by finding the
-    // call to RtlIsGenericTableEmptyAvl and tracing back to the LEA rcx that loads the
-    // table address.  PiDDBLock is the LEA rcx before the closest ExAcquireResource* call
-    // that precedes the table check.
-    //
-    static NTSTATUS ResolvePiDDBCacheTable( ZydisDecoder* Decoder, UINT64 TextStart, UINT64 TextEnd )
-    {
-        UINT64 AddrRtlEmpty = GetRoutine( L"RtlIsGenericTableEmptyAvl" );
-        UINT64 AddrExAcqEx  = GetRoutine( L"ExAcquireResourceExclusiveLite" );
-        UINT64 AddrExAcqSh  = GetRoutine( L"ExAcquireResourceSharedLite" );
-
-        if ( !AddrRtlEmpty )
-        {
-            LogError( "Offsets: RtlIsGenericTableEmptyAvl not found" );
-            return STATUS_NOT_FOUND;
-        }
-
-        for ( UINT64 Va = TextStart; Va < TextEnd; )
-        {
-            ZydisDecodedInstruction Instr;
-            ZydisDecodedOperand     Ops[ZYDIS_MAX_OPERAND_COUNT];
-
-            if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)Va, TextEnd - Va, &Instr, Ops ) ) )
-            { Va++; continue; }
-
-            if ( Instr.mnemonic != ZYDIS_MNEMONIC_CALL )
-            { Va += Instr.length; continue; }
-
-            // Support both direct (E8) and indirect (FF 15) calls.
-            UINT64 CallTarget = 0;
-            if ( Ops[0].type == ZYDIS_OPERAND_TYPE_IMMEDIATE )
-                ZydisCalcAbsoluteAddress( &Instr, &Ops[0], Va, &CallTarget );
-            else if ( Ops[0].type == ZYDIS_OPERAND_TYPE_MEMORY &&
-                      Ops[0].mem.base == ZYDIS_REGISTER_RIP )
-            {
-                UINT64 Slot = 0;
-                ZydisCalcAbsoluteAddress( &Instr, &Ops[0], Va, &Slot );
-                CallTarget = *reinterpret_cast<UINT64*>( Slot );
-            }
-
-            if ( CallTarget != AddrRtlEmpty )
-            { Va += Instr.length; continue; }
-
-            // Found the call.  Collect the backward window.
-            UINT64 WinStart = ( Va > TextStart + 0x100 ) ? Va - 0x100 : TextStart;
-
-            UINT64 InsVa[64]{};
-            UCHAR  InsLen[64]{};
-            ULONG  InsCount = 0;
-
-            for ( UINT64 V2 = WinStart; V2 < Va && InsCount < 64; )
-            {
-                ZydisDecodedInstruction Ix;
-                ZydisDecodedOperand     Ox[ZYDIS_MAX_OPERAND_COUNT];
-                if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)V2, Va - V2, &Ix, Ox ) ) )
-                { V2++; continue; }
-                InsVa[InsCount]  = V2;
-                InsLen[InsCount] = static_cast<UCHAR>( Ix.length );
-                ++InsCount;
-                V2 += Ix.length;
-            }
-
-            // PiDDBCacheTable: the last LEA rcx,[RIP+rel] before the RtlIsGenericTableEmptyAvl call.
-            UINT64 TableAddr = 0;
-            for ( int K = (int)InsCount - 1; K >= 0 && !TableAddr; --K )
-            {
-                ZydisDecodedInstruction Ix;
-                ZydisDecodedOperand     Ox[ZYDIS_MAX_OPERAND_COUNT];
-                if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)InsVa[K], 16, &Ix, Ox ) ) ) continue;
-
-                if ( Ix.mnemonic == ZYDIS_MNEMONIC_LEA &&
-                     Ox[0].type  == ZYDIS_OPERAND_TYPE_REGISTER &&
-                     Ox[0].reg.value == ZYDIS_REGISTER_RCX &&
-                     Ox[1].type  == ZYDIS_OPERAND_TYPE_MEMORY &&
-                     Ox[1].mem.base == ZYDIS_REGISTER_RIP )
-                {
-                    ZydisCalcAbsoluteAddress( &Ix, &Ox[1], InsVa[K], &TableAddr );
-                }
-            }
-
-            if ( !TableAddr )
-            { Va += Instr.length; continue; }
-
-            // PiDDBLock: LEA rcx,[RIP+rel] directly before a CALL ExAcquireResource*.
-            UINT64 LockAddr = 0;
-            for ( ULONG K = 0; K + 1 < InsCount && !LockAddr; ++K )
-            {
-                ZydisDecodedInstruction Ia, Ib;
-                ZydisDecodedOperand     Oa[ZYDIS_MAX_OPERAND_COUNT],
-                                        Ob[ZYDIS_MAX_OPERAND_COUNT];
-
-                if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)InsVa[K],   16, &Ia, Oa ) ) ) continue;
-                if ( !ZYAN_SUCCESS( ZydisDecoderDecodeFull( Decoder, (void*)InsVa[K+1], 16, &Ib, Ob ) ) ) continue;
-
-                if ( !( Ia.mnemonic == ZYDIS_MNEMONIC_LEA &&
-                        Oa[0].type  == ZYDIS_OPERAND_TYPE_REGISTER &&
-                        Oa[0].reg.value == ZYDIS_REGISTER_RCX &&
-                        Oa[1].type  == ZYDIS_OPERAND_TYPE_MEMORY &&
-                        Oa[1].mem.base == ZYDIS_REGISTER_RIP ) )
-                    continue;
-
-                if ( Ib.mnemonic != ZYDIS_MNEMONIC_CALL )
-                    continue;
-
-                UINT64 AcqTarget = 0;
-                if ( Ob[0].type == ZYDIS_OPERAND_TYPE_IMMEDIATE )
-                    ZydisCalcAbsoluteAddress( &Ib, &Ob[0], InsVa[K+1], &AcqTarget );
-                else if ( Ob[0].type == ZYDIS_OPERAND_TYPE_MEMORY &&
-                          Ob[0].mem.base == ZYDIS_REGISTER_RIP )
-                {
-                    UINT64 Slot = 0;
-                    ZydisCalcAbsoluteAddress( &Ib, &Ob[0], InsVa[K+1], &Slot );
-                    AcqTarget = *reinterpret_cast<UINT64*>( Slot );
-                }
-
-                if ( ( AddrExAcqEx && AcqTarget == AddrExAcqEx ) ||
-                     ( AddrExAcqSh && AcqTarget == AddrExAcqSh ) )
-                {
-                    ZydisCalcAbsoluteAddress( &Ia, &Oa[1], InsVa[K], &LockAddr );
-                }
-            }
-
-            PiDDBCacheTable = reinterpret_cast<PVOID>( TableAddr );
-            Log( "Offsets: PiDDBCacheTable -> {}", TableAddr );
-
-            if ( LockAddr )
-            {
-                PiDDBLock = reinterpret_cast<PVOID>( LockAddr );
-                Log( "Offsets: PiDDBLock -> {}", LockAddr );
-            }
-            else
-                LogWarn( "Offsets: PiDDBLock not found near PiDDBCacheTable" );
-
-            return STATUS_SUCCESS;
-        }
-
-        LogError( "Offsets: PiDDBCacheTable not found" );
-        return STATUS_NOT_FOUND;
-    }
-
-    /// <summary>
-    /// Resolves all kernel offsets used by the driver.
-    /// </summary>
-    /// <returns></returns>
     NTSTATUS Init( )
     {
         Util::DriverInfo NtInfo{};
@@ -1145,18 +1299,22 @@ namespace Offsets
         }
 
         UINT64 TextStart = 0, TextSize = 0;
-        if ( !FindTextSection( NtInfo.Base, &TextStart, &TextSize ) )
+        if ( !FindNamedSection( NtInfo.Base, ".text", &TextStart, &TextSize ) )
         {
             LogWarn( "Offsets: .text section not found, skipping pattern scan" );
             return STATUS_SUCCESS;
         }
-
         UINT64 TextEnd = TextStart + TextSize;
+
+        // PAGE section is required for most PatchGuard and ExAllocateTimer call sites.
+        UINT64 PageStart = 0, PageSize = 0;
+        FindNamedSection( NtInfo.Base, "PAGE", &PageStart, &PageSize );
+        UINT64 PageEnd = PageStart ? PageStart + PageSize : 0;
 
         ZydisDecoder Decoder;
         ZydisDecoderInit( &Decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64 );
 
-        NTSTATUS Status = ResolveKiFilterFiberContext( &Decoder, TextStart, TextEnd );
+        NTSTATUS Status = ResolveKiFilterFiberContext( &Decoder, TextStart, TextEnd, PageStart, PageEnd );
         if ( !NT_SUCCESS( Status ) )
             LogWarn( "Offsets: KiFilterFiberContext not resolved ({})", Status );
         else
@@ -1166,31 +1324,47 @@ namespace Offsets
                 LogWarn( "Offsets: PG globals not extracted ({})", Status );
         }
 
-        Status = ResolveTimerContextOffset( &Decoder, TextStart, TextEnd );
+        Status = ResolveTimerContextOffset( &Decoder, TextStart, TextEnd, PageStart, PageEnd );
         if ( !NT_SUCCESS( Status ) )
             LogWarn( "Offsets: timer context offset not resolved ({})", Status );
 
         CrossCheckMaxDataSize( &Decoder, TextStart, TextEnd );
 
-        Status = ResolveSmbiosGlobals( &Decoder, TextStart, TextEnd );
+        Status = ResolveSmbiosGlobals( &Decoder, TextStart, TextEnd, PageStart, PageEnd );
         if ( !NT_SUCCESS( Status ) )
             LogWarn( "Offsets: SMBIOS globals not resolved ({})", Status );
 
-        // Process protection + ObCallback integrity offsets.
-        //
+        Status = ResolveMmUnloadedDrivers( &Decoder, TextStart, TextEnd );
+        if ( !NT_SUCCESS( Status ) )
+        {
+            if ( PageStart )
+                Status = ResolveMmUnloadedDrivers( &Decoder, PageStart, PageEnd );
+            if ( !NT_SUCCESS( Status ) )
+                LogWarn( "Offsets: MmUnloadedDrivers not resolved ({})", Status );
+        }
+
+        Status = ResolvePiDDB( &Decoder, TextStart, TextEnd );
+        if ( !NT_SUCCESS( Status ) )
+        {
+            if ( PageStart )
+                Status = ResolvePiDDB( &Decoder, PageStart, PageEnd );
+            if ( !NT_SUCCESS( Status ) )
+                LogWarn( "Offsets: PiDDB not resolved ({})", Status );
+        }
+
         Status = ResolveEprocessProtectionOffset( &Decoder );
         if ( !NT_SUCCESS( Status ) )
             LogWarn( "Offsets: EprocessProtectionOffset not resolved ({})", Status );
 
         ResolveObjTypeCallbackListOffset( &Decoder );
 
-        // NDIS offsets | scan ndis.sys independently.
+        // NDIS offsets — scan ndis.sys independently.
         //
         Util::DriverInfo NdisInfo{};
         if ( Util::QueryDriver( "ndis.sys", &NdisInfo ) )
         {
             UINT64 NdisTextStart = 0, NdisTextSize = 0;
-            if ( FindTextSection( NdisInfo.Base, &NdisTextStart, &NdisTextSize ) )
+            if ( FindNamedSection( NdisInfo.Base, ".text", &NdisTextStart, &NdisTextSize ) )
             {
                 UINT64 NdisTextEnd = NdisTextStart + NdisTextSize;
 

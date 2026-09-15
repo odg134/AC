@@ -65,10 +65,10 @@ NTSTATUS ObDriver::EnumerateDirectory( const wchar_t* Path )
             if ( !Info->Name.Length )
                 break;
 
-            m_Entries[m_Count].HashPath = 0;
-            m_Entries[m_Count].HashName = Hash::Blake2b(
+            m_Entries[m_Count].HashName      = Hash::Blake2b(
                 reinterpret_cast<const UCHAR*>( Info->Name.Buffer ),
                 Info->Name.Length );
+            m_Entries[m_Count].TimeDateStamp = 0;
             ++m_Count;
         }
 

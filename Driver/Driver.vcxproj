@@ -59,6 +59,7 @@
       <WarningLevel>Level4</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <AdditionalIncludeDirectories>$(WindowsSdkDir)Include\$(TargetPlatformVersion)\km;$(WindowsSdkDir)Include\wdf\kmdf\1.33;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <ObjectFileName>$(IntDir)%(RelativeDir)%(Filename).obj</ObjectFileName>
     </ClCompile>
     <Link>
       <SubSystem>Native</SubSystem>
@@ -80,6 +81,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <AdditionalIncludeDirectories>$(WindowsSdkDir)Include\$(TargetPlatformVersion)\km;$(WindowsSdkDir)Include\wdf\kmdf\1.33;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <ObjectFileName>$(IntDir)%(RelativeDir)%(Filename).obj</ObjectFileName>
     </ClCompile>
     <Link>
       <SubSystem>Native</SubSystem>
@@ -100,6 +102,7 @@
     <ClCompile Include="Core\Dispatch\Packet\Packet.cpp" />
     <ClCompile Include="Core\Dispatch\Packet\Queue\Queue.cpp" />
     <ClCompile Include="Core\Dispatch\Packet\Telemetry\Telemetry.cpp" />
+    <ClCompile Include="Core\Dispatch\Packet\Vectors\Vectors.cpp" />
     <ClCompile Include="Core\Environment\Environment.cpp" />
     <ClCompile Include="Core\Environment\PG\PG.cpp" />
     <ClCompile Include="Core\Environment\VM\Checks\AntiSpoof.cpp" />
@@ -128,14 +131,28 @@
     <ClCompile Include="Core\Mem\Mem.cpp" />
     <ClCompile Include="Core\Mem\Pool\Pool.cpp" />
     <ClCompile Include="Core\Offsets\Offsets.cpp" />
+    <ClCompile Include="Core\Process\Guard\Guard.cpp" />
+    <ClCompile Include="Core\Process\Guard\Integrity\Integrity.cpp" />
+    <ClCompile Include="Core\Process\Process.cpp" />
+    <ClCompile Include="Core\Process\Telemetry\ProcTelemetry.cpp" />
     <ClCompile Include="Core\Thread\Thread.cpp" />
+    <ClCompile Include="Core\Vectors\Drivers\Drivers.cpp" />
+    <ClCompile Include="Core\Vectors\Drivers\ObDriver\ObDriver.cpp" />
+    <ClCompile Include="Core\Vectors\Drivers\PiDDB\PiDDB.cpp" />
+    <ClCompile Include="Core\Vectors\Drivers\PsModuleList\PsModuleList.cpp" />
+    <ClCompile Include="Core\Vectors\Drivers\SvcReg\SvcReg.cpp" />
+    <ClCompile Include="Core\Vectors\Drivers\SysQuery\SysQuery.cpp" />
+    <ClCompile Include="Core\Vectors\Drivers\UnloadedList\UnloadedList.cpp" />
     <ClCompile Include="Core\Vectors\Integrity\CodeCave\CodeCave.cpp" />
     <ClCompile Include="Core\Vectors\Integrity\Integrity.cpp" />
     <ClCompile Include="Core\Vectors\Integrity\Memory\Memory.cpp" />
     <ClCompile Include="Core\Vectors\Integrity\Packet\IntegrityTelemetry.cpp" />
     <ClCompile Include="Core\Vectors\Integrity\Patch\Patch.cpp" />
     <ClCompile Include="Core\Vectors\Integrity\Scan\Scan.cpp" />
+    <ClCompile Include="Core\Vectors\PPL\PPL.cpp" />
+    <ClCompile Include="Core\Vectors\PPL\Telemetry\PplTelemetry.cpp" />
     <ClCompile Include="Core\Vectors\Regions\Modules\Modules.cpp" />
+    <ClCompile Include="Core\Vectors\Regions\Regions.cpp" />
     <ClCompile Include="Core\Vectors\Regions\Pte\Pte.cpp" />
     <ClCompile Include="Core\Vectors\Regions\Scan\PeIntegrity.cpp" />
     <ClCompile Include="Core\Vectors\Regions\Scan\Walk.cpp" />

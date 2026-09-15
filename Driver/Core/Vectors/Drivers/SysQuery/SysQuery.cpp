@@ -1,7 +1,28 @@
 #include <Misc/Incl.h>
+#pragma pack(push)
+#include <ntimage.h>
+#pragma pack(pop)
 #include <Misc/Hash/Hash.h>
 #include "SysQuery.h"
 
+static ULONG PeTimeDateStamp( PVOID Base )
+{
+    __try
+    {
+        auto* Dos = static_cast<PIMAGE_DOS_HEADER>( Base );
+        if ( Dos->e_magic != IMAGE_DOS_SIGNATURE )
+            return 0;
+        auto* Nt = reinterpret_cast<PIMAGE_NT_HEADERS>(
+            static_cast<PUCHAR>( Base ) + Dos->e_lfanew );
+        if ( Nt->Signature != IMAGE_NT_SIGNATURE )
+            return 0;
+        return Nt->FileHeader.TimeDateStamp;
+    }
+    __except ( EXCEPTION_EXECUTE_HANDLER ) { return 0; }
+}
+
+typedef enum _SYSTEM_INFORMATION_CLASS SYSTEM_INFORMATION_CLASS;
+extern "C" NTSTATUS ZwQuerySystemInformation( SYSTEM_INFORMATION_CLASS, PVOID, ULONG, PULONG );
 #define SystemModuleInformation ((SYSTEM_INFORMATION_CLASS)11)
 
 #pragma warning(push)
@@ -55,16 +76,11 @@ NTSTATUS SysQuery::Collect()
             if ( NameOff >= FullLen )
                 continue;
 
-            auto& E    = m_Entries[m_Count];
-            E.HashName = Hash::Blake2b(
+            auto& E         = m_Entries[m_Count];
+            E.HashName      = Hash::Blake2b(
                 reinterpret_cast<const UCHAR*>( FullPath + NameOff ),
                 FullLen - NameOff );
-
-            if ( FullLen )
-                E.HashPath = Hash::Blake2b(
-                    reinterpret_cast<const UCHAR*>( FullPath ),
-                    FullLen );
-
+            E.TimeDateStamp = M.ImageBase ? PeTimeDateStamp( M.ImageBase ) : 0;
             ++m_Count;
         }
     }

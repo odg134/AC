@@ -8,8 +8,8 @@ namespace Vectors
 {
 #pragma pack(push, 1)
     struct DriverEntry {
-        ULONG64 HashPath;
         ULONG64 HashName;
+        ULONG   TimeDateStamp;
         UCHAR   IsUnloaded;
     };
 

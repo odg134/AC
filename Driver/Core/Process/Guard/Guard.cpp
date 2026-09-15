@@ -3,6 +3,10 @@
 #include <Core/Offsets/Offsets.h>
 #include "Guard.h"
 
+extern "C" NTKERNELAPI PUCHAR   PsGetProcessImageFileName( PEPROCESS Process );
+extern "C" NTKERNELAPI PVOID    PsGetProcessWow64Process( PEPROCESS Process );
+extern "C" NTKERNELAPI PPEB     PsGetProcessPeb( PEPROCESS Process );
+
 namespace Process::Guard
 {
     static constexpr ULONG RingCapacity = 64;

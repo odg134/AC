@@ -18,9 +18,9 @@ namespace Integrity::Memory
     static constexpr ULONG WriteMask = PAGE_READWRITE | PAGE_WRITECOPY
                                      | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
 
-    static constexpr ULONG MEM_COMMIT  = 0x1000;
-    static constexpr ULONG MEM_PRIVATE = 0x20000;
-    static constexpr ULONG MEM_IMAGE   = 0x1000000;
+    static constexpr ULONG MemTypeCommit  = 0x1000;
+    static constexpr ULONG MemTypePrivate = 0x20000;
+    static constexpr ULONG MemTypeImage   = 0x1000000;
 
     // MemoryBasicInformation class.
     //

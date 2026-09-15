@@ -5,7 +5,9 @@
 #include <Core/Identity/Identity.h>
 #include <Core/Identity/Disk/Disk.h>
 #include <Core/Identity/Network/Network.h>
+#include <Core/Vectors/Drivers/Drivers.h>
 #include <Core/Dispatch/Packet/Telemetry/Telemetry.h>
+#include <Core/Dispatch/Packet/Vectors/Vectors.h>
 #include <Core/Dispatch/Packet/Queue/Queue.h>
 #include <Core/Dispatch/Packet/Crypto/Crypto.h>
 #include <Core/Process/Process.h>
@@ -21,7 +23,9 @@ namespace Thread
 
     static Identity HwidTable;
     static Disk     DiskCollector;
+    static Smbios   SmbiosCollector;
     static Network  NetworkCollector;
+    static Drivers  DriverScanner;
 
     static constexpr ULONG CheckEvery        = 50;   // 5s  (env + integrity checks)
     static constexpr ULONG CollectEvery      = 300;  // 30s (hwid + telemetry)
@@ -43,7 +47,9 @@ namespace Thread
         if ( NetHash && !HwidTable.Contains( NetHash ) )
             HwidTable.Add( NetHash );
 
-        Telemetry::Source Src{ &HwidTable, &DiskCollector, nullptr, &NetworkCollector };
+        SmbiosCollector.Collect( );
+
+        Telemetry::Source Src{ &HwidTable, &DiskCollector, &SmbiosCollector, &NetworkCollector };
         Packet::Raw Pkt = Telemetry::Build( Src );
 
         // Encrypt payload before the packet enters the queue
@@ -53,6 +59,15 @@ namespace Thread
 
         Packet::g_Queue.Enqueue( Pkt );
         Log( "Thread: telemetry enqueued (seq {})", Pkt.Hdr.Sequence );
+
+        DriverScanner.Collect();
+        Vectors::Source VSrc{ &DriverScanner };
+        Packet::Raw VPkt = Vectors::Build( VSrc );
+        Crypto::Nonce VN = Crypto::NonceFromSequence( VPkt.Hdr.Sequence );
+        Crypto::Encrypt( VPkt.Payload, VPkt.Hdr.PayloadSize, Crypto::SessionKey, VN );
+        Packet::g_Queue.Enqueue( VPkt );
+        Log( "Thread: vectors enqueued (seq {}, {} drivers)", VPkt.Hdr.Sequence,
+             reinterpret_cast<Vectors::Payload*>( VPkt.Payload )->DriverCount );
     }
 
     /// <summary>
@@ -80,7 +95,7 @@ namespace Thread
             if ( Ticks % CheckEvery == 0 )
             {
                 Environment::Check( );
-                Regions::Scan( );
+                Regions::Run( );
 
                 if ( !Process::Guard::Integrity::Validate( ) )
                     LogWarn( "Thread: ObCallback integrity check failed — tampering detected" );

@@ -7,8 +7,8 @@ public:
     static constexpr ULONG MaxEntries = 256;
 
     struct Entry {
-        ULONG64 HashPath;
         ULONG64 HashName;
+        ULONG   TimeDateStamp;
     };
 
     NTSTATUS Collect();

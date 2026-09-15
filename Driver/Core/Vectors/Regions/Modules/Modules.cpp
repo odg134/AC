@@ -32,13 +32,19 @@ namespace Regions::Modules
         ULONG  SystemInformationLength,
         PULONG ReturnLength );
 
-    static int CompareRange( const void* A, const void* B )
+    static void SortRanges( Range* Arr, ULONG Count )
     {
-        const Range* Ra = static_cast< const Range* >( A );
-        const Range* Rb = static_cast< const Range* >( B );
-        if ( Ra->Base < Rb->Base ) return -1;
-        if ( Ra->Base > Rb->Base ) return  1;
-        return 0;
+        for ( ULONG i = 1; i < Count; ++i )
+        {
+            Range Key = Arr[i];
+            LONG  j   = static_cast<LONG>( i ) - 1;
+            while ( j >= 0 && Arr[j].Base > Key.Base )
+            {
+                Arr[j + 1] = Arr[j];
+                --j;
+            }
+            Arr[j + 1] = Key;
+        }
     }
 
     /// <summary>
@@ -84,7 +90,7 @@ namespace Regions::Modules
 
         // Sort by base for binary search.
         //
-        qsort( Out.Entries, Out.Count, sizeof( Range ), CompareRange );
+        SortRanges( Out.Entries, Out.Count );
         return STATUS_SUCCESS;
     }
 
