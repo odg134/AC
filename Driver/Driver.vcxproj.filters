@@ -164,6 +164,51 @@
     <ClCompile Include="Core\Vectors\Regions\Telemetry\RegionsTelemetry.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Core\Dispatch\Packet\Vectors\Vectors.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Process\Guard\Guard.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Process\Guard\Integrity\Integrity.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Process\Process.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Process\Telemetry\ProcTelemetry.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Vectors\Drivers\Drivers.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Vectors\Drivers\ObDriver\ObDriver.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Vectors\Drivers\PiDDB\PiDDB.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Vectors\Drivers\PsModuleList\PsModuleList.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Vectors\Drivers\SvcReg\SvcReg.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Vectors\Drivers\SysQuery\SysQuery.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Vectors\Drivers\UnloadedList\UnloadedList.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Vectors\PPL\PPL.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Vectors\PPL\Telemetry\PplTelemetry.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Vectors\Regions\Regions.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Core\Dispatch\Dispatch.h">
@@ -320,6 +365,18 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Core\Vectors\Regions\Telemetry\RegionsTelemetry.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Process\Guard\Integrity\Integrity.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Process\Guard\Guard.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Process\Telemetry\ProcTelemetry.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Process\Process.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

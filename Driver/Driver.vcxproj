@@ -198,6 +198,10 @@
     <ClInclude Include="Core\Mem\Mem.h" />
     <ClInclude Include="Core\Mem\Pool\Pool.h" />
     <ClInclude Include="Core\Offsets\Offsets.h" />
+    <ClInclude Include="Core\Process\Guard\Guard.h" />
+    <ClInclude Include="Core\Process\Guard\Integrity\Integrity.h" />
+    <ClInclude Include="Core\Process\Process.h" />
+    <ClInclude Include="Core\Process\Telemetry\ProcTelemetry.h" />
     <ClInclude Include="Core\Thread\Thread.h" />
     <ClInclude Include="Core\Vectors\Integrity\CodeCave\CodeCave.h" />
     <ClInclude Include="Core\Vectors\Integrity\Integrity.h" />
