@@ -5,6 +5,11 @@
 #include <Core/Vectors/PPL/Telemetry/PplTelemetry.h>
 #include "PPL.h"
 
+typedef enum _SYSTEM_INFORMATION_CLASS SYSTEM_INFORMATION_CLASS;
+extern "C" NTSTATUS ZwQuerySystemInformation( SYSTEM_INFORMATION_CLASS, PVOID, ULONG, PULONG );
+extern "C" NTKERNELAPI NTSTATUS PsLookupProcessByProcessId( HANDLE ProcessId, PEPROCESS* Process );
+extern "C" NTKERNELAPI PUCHAR   PsGetProcessImageFileName( PEPROCESS Process );
+
 namespace PPL
 {
     // Processes that are legitimately PPL-protected on a normal Windows install.
